@@ -1,6 +1,6 @@
 # embtool 상세 기획서
 
-> **버전**: v0.1 Draft
+> **버전**: v0.2 Draft
 > **작성일**: 2026-03-08
 > **작성자**: 노수장 / 앨리스
 
@@ -77,6 +77,57 @@ a2550mcu/
 | MK66FN2M0 (K66) | Cortex-M4 | Kinetis K66 | (예정) |
 | STM32 (TBD) | Cortex-M? | STM32 | (선정 중) |
 
+### 1.4 팀 환경
+
+```
+팀 구성:
+• 인원: 4-5명
+• 개발 OS: Windows (MCU 개발)
+• CI/CD: GitLab CI 또는 Jenkins (Linux 컨테이너/에이전트)
+• 네트워크: 외부 인터넷 접근 가능
+• 현재 배포: 사내 FTP → CMake 스텝에서 자동 다운로드
+```
+
+**팀 워크플로우 요구사항:**
+```
+팀원 온보딩 (현재):                  팀원 온보딩 (embtool):
+┌────────────────────────┐          ┌────────────────────────┐
+│ 1. IDE 설치 (1시간)     │          │ 1. embtool.exe 설치    │
+│ 2. SDK 다운로드 (30분)  │          │ 2. git clone project   │
+│ 3. FTP 경로 확인       │          │ 3. embtool setup       │
+│ 4. CMake 환경 설정     │          │    → 끝! (5분)         │
+│ 5. 빌드 테스트/디버그   │          └────────────────────────┘
+│ 6. 경로 안 맞으면 삽질  │
+│    (30분~반나절)        │
+└────────────────────────┘
+```
+
+**CI/CD 요구사항:**
+```yaml
+# GitLab CI 예시 (목표)
+build:
+  image: rust-embedded  # 또는 ubuntu + embtool 설치
+  script:
+    - embtool setup          # 툴체인 자동 설치
+    - embtool build --release
+  artifacts:
+    paths:
+      - build/*.elf
+      - build/*.bin
+
+# Jenkins 예시 (목표)
+pipeline {
+  stages {
+    stage('Setup') {
+      steps { sh 'embtool setup' }
+    }
+    stage('Build') {
+      steps { sh 'embtool build --release' }
+    }
+  }
+}
+```
+
 ---
 
 ## 2. embtool 목표
@@ -88,8 +139,9 @@ embtool이 해결하는 것:
 │ • 툴체인을 시스템 레벨에서 관리 (프로젝트 밖)               │
 │ • 한 줄 명령으로 프로젝트 생성 (보일러플레이트 제거)          │
 │ • arm-toolchain.cmake 자동 생성                          │
-│ • 팀원 환경 자동 통일                                      │
-│ • 크로스플랫폼 (Linux/Windows)                            │
+│ • embtool setup 한 줄로 팀원 환경 자동 통일                │
+│ • 크로스플랫폼 (Windows 개발 + Linux CI/CD)               │
+│ • embtool.toml → Git 커밋 → 팀 전원 동일 환경 보장         │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -107,6 +159,91 @@ CMake 수동 작성                  (자동 생성)
 ---
 
 ## 3. 기능 설계
+
+### 3.0 Phase 0: 팀 온보딩 (setup)
+
+모든 기능의 전제 — `embtool setup`으로 팀원이 즉시 개발 시작 가능:
+
+#### `embtool setup`
+```bash
+# 팀원이 프로젝트를 clone한 후 실행
+$ git clone https://gitlab.company.com/firmware/a2750mcu.git
+$ cd a2750mcu/products/a2750lm_application
+$ embtool setup
+
+🔍 Reading embtool.toml...
+   Project: a2750lm_application
+   MCU: MK64FN1M0VLL12 (Cortex-M4)
+   Required toolchain: 13.3.rel1
+
+📦 Toolchain 13.3.rel1 not found locally.
+   Downloading from ARM official...
+   [████████████████████████████████] 100% (245 MB)
+   Installing to C:\Users\{user}\.embtool\toolchains\13.3.rel1\
+
+🔧 Generating arm-toolchain.cmake...
+✅ Setup complete! Run 'embtool build' to build.
+```
+
+**핵심 원리:**
+```
+Git에 커밋되는 것:              로컬에만 존재하는 것:
+┌────────────────────┐        ┌─────────────────────────┐
+│ embtool.toml       │        │ ~/.embtool/toolchains/  │
+│ (툴체인 버전 고정)  │   →    │ (실제 바이너리)          │
+│                    │        │                         │
+│ arm-toolchain.cmake│        │ build/                  │
+│ (자동 생성, 경로    │        │ (빌드 산출물)            │
+│  ~/.embtool 참조)  │        └─────────────────────────┘
+└────────────────────┘
+  팀원 모두 동일              OS별 자동 해석
+```
+
+#### 팀 .gitignore 패턴
+```gitignore
+# embtool
+build/
+# arm-toolchain.cmake는 커밋 (embtool이 관리하지만 IDE 호환용)
+```
+
+#### Windows 경로 처리
+```cmake
+# arm-toolchain.cmake (자동 생성, OS 자동 감지)
+if(WIN32)
+    set(EMBTOOL_HOME "$ENV{USERPROFILE}/.embtool")
+else()
+    set(EMBTOOL_HOME "$ENV{HOME}/.embtool")
+endif()
+set(ARM_TOOLCHAIN_ROOT "${EMBTOOL_HOME}/toolchains/13.3.rel1")
+```
+
+#### CI/CD 모드
+```bash
+# CI 환경에서는 --ci 플래그로 대화형 프롬프트 비활성화
+$ embtool setup --ci
+
+# 또는 환경변수로 제어
+$ EMBTOOL_CI=1 embtool setup
+```
+
+#### embtool 배포 방법
+```
+팀원 설치 방법:
+1. GitHub Releases에서 OS별 바이너리 다운로드
+   - embtool-windows-x86_64.exe → C:\tools\embtool.exe
+   - embtool-linux-x86_64      → /usr/local/bin/embtool
+2. PATH에 추가
+3. 끝!
+
+CI/CD 설치 (Dockerfile/스크립트):
+   curl -L https://github.com/solitasroh/embtool/releases/latest/download/embtool-linux-x86_64 -o /usr/local/bin/embtool
+   chmod +x /usr/local/bin/embtool
+
+사내 배포 (대안):
+   FTP에 embtool 바이너리도 같이 올려서 배포
+```
+
+---
 
 ### 3.1 Phase 1: 툴체인 관리 (MVP)
 
@@ -167,23 +304,41 @@ $ embtool toolchain remove 10.3
     └── gcc-arm-none-eabi-13.3-...tar.xz
 ```
 
-#### 전역 설정 (config.toml)
+#### 전역 설정 (~/.embtool/config.toml)
 ```toml
 [toolchain]
 default = "13.3.rel1"
 install_dir = "~/.embtool/toolchains"
 
 [toolchain.sources]
-# ARM 공식 다운로드 URL 패턴
+# ARM 공식 다운로드 (기본)
 arm_gnu = "https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads"
 
-# 사내 FTP 미러 (선택)
+# 사내 FTP 미러 (팀 배포용, 우선순위 높음)
 [toolchain.mirror]
 enabled = true
-url = "ftp://internal-server/toolchains/"
+url = "ftp://192.168.x.x/toolchains/"
+# 미러에 없으면 ARM 공식에서 다운로드 (fallback)
+fallback = true
 
 [debug]
 default_probe = "pemicro"
+
+[ci]
+# CI 환경 자동 감지 (GITLAB_CI, JENKINS_URL, CI 환경변수)
+auto_detect = true
+```
+
+#### 팀 전역 설정 공유
+```
+팀 리더가 config.toml 템플릿을 FTP에 올려두면:
+$ embtool config import ftp://192.168.x.x/embtool/config.toml
+
+또는 프로젝트별 .embtool/config.toml 로 오버라이드:
+project/
+├── .embtool/
+│   └── config.toml      # 프로젝트별 설정 (Git 커밋)
+└── embtool.toml          # 프로젝트 메타데이터 (Git 커밋)
 ```
 
 ---
@@ -490,42 +645,49 @@ xz2 = "0.1"                                          # xz 해제
 
 ## 8. 구현 로드맵
 
-### Phase 1: 툴체인 관리 (Week 1-2)
-- [ ] `~/.embtool` 디렉토리 구조 생성
-- [ ] `config.toml` 관리
-- [ ] ARM GNU Toolchain 다운로드 URL 파싱
-- [ ] 다운로드 + 진행바
-- [ ] tar.xz 해제 및 설치
+### Phase 0: 팀 인프라 (Week 1)
+- [ ] `~/.embtool` 디렉토리 구조 설계
+- [ ] `config.toml` 전역/프로젝트별 설정 관리
+- [ ] `embtool setup` 명령 (embtool.toml 읽고 환경 구성)
+- [ ] `--ci` 플래그 / CI 환경 자동 감지
+- [ ] Windows + Linux 경로 처리
+- [ ] GitHub Releases 바이너리 배포 (cross-compilation)
+
+### Phase 1: 툴체인 관리 (Week 2-3)
+- [ ] ARM GNU Toolchain 다운로드 URL 파싱 (developer.arm.com)
+- [ ] 사내 FTP 미러 우선 다운로드 + ARM 공식 fallback
+- [ ] 다운로드 + 진행바 (indicatif)
+- [ ] tar.xz / zip 해제 및 설치 (Linux: tar.xz, Windows: zip)
 - [ ] `toolchain install/list/use/remove` 구현
-- [ ] 버전 전환 (symlink 방식)
+- [ ] 버전 전환 (Linux: symlink, Windows: config 기반)
 
-### Phase 2: 프로젝트 생성 (Week 3-4)
-- [ ] MCU 데이터베이스 구축
-- [ ] 프로젝트 템플릿 시스템
+### Phase 2: 프로젝트 생성 (Week 4-5)
+- [ ] MCU 데이터베이스 구축 (NXP Kinetis)
+- [ ] 프로젝트 템플릿 시스템 (handlebars)
 - [ ] `embtool new --mcu` 구현
-- [ ] CMakeLists.txt 자동 생성
-- [ ] arm-toolchain.cmake 자동 생성
+- [ ] CMakeLists.txt / arm-toolchain.cmake 자동 생성
 - [ ] embtool.toml 생성
-- [ ] 스타트업/링커스크립트 번들
+- [ ] NXP 스타트업/링커스크립트 번들
+- [ ] `--type bootloader/application/library` 지원
 
-### Phase 3: 빌드 & 플래시 (Week 5-6)
+### Phase 3: 빌드 & 플래시 (Week 6-7)
 - [ ] CMake 래핑 (`embtool build`)
-- [ ] 빌드 결과 요약 (Flash/RAM 사용량)
+- [ ] 빌드 결과 요약 (Flash/RAM 사용량 파싱)
 - [ ] PEMicro 연동 (`embtool flash`)
 - [ ] 빌드 프로파일 (Debug/Release)
 
-### Phase 4: 마이그레이션 (Week 7-8)
-- [ ] 기존 CMakeLists.txt 파싱
-- [ ] arm-toolchain.cmake 분석
+### Phase 4: 마이그레이션 (Week 8-9)
+- [ ] 기존 CMakeLists.txt + arm-toolchain.cmake 파싱
 - [ ] 자동 embtool.toml 생성
-- [ ] 마이그레이션 검증 (빌드 결과 비교)
+- [ ] a2750mcu 프로젝트 마이그레이션 검증
+- [ ] 빌드 결과 바이너리 비교 (diff)
 
 ### Phase 5: 고급 기능 (향후)
-- [ ] 컴포넌트/패키지 관리
+- [ ] 컴포넌트/패키지 관리 (components/ → 독립 패키지)
 - [ ] STM32 지원
-- [ ] 사내 FTP 미러 연동
-- [ ] CI/CD 지원 (GitHub Actions)
+- [ ] GitLab CI / Jenkins 파이프라인 템플릿 생성
 - [ ] VS Code 확장
+- [ ] `embtool doctor` (환경 진단)
 
 ---
 
@@ -534,12 +696,42 @@ xz2 = "0.1"                                          # xz 해제
 | 기존 도구 | embtool |
 |-----------|---------|
 | IDE 종속 (MCUXpresso, KDS) | IDE 독립, CLI 기반 |
-| 툴체인이 프로젝트 내부 | 시스템 레벨 관리 (nvm 방식) |
+| 툴체인이 프로젝트 내부 (187MB) | 시스템 레벨 관리 (nvm 방식) |
 | 수동 CMake 작성 | 자동 생성 |
 | 벤더별 별도 도구 | NXP + STM32 통합 |
-| Windows 중심 | 크로스플랫폼 |
-| 프로젝트 187MB | 소스만 ~1MB |
+| Windows 중심 | Windows 개발 + Linux CI/CD |
+| 개인 환경 구성 | `embtool setup` 팀 환경 자동 통일 |
+| FTP 수동 관리 | FTP 미러 + ARM 공식 fallback |
+| 팀원 온보딩 반나절 | `embtool setup` 5분 |
 
 ---
 
-*기획서 v0.1 - 2026-03-08*
+## 10. 릴리스 전략
+
+### 바이너리 배포
+```
+GitHub Releases:
+├── embtool-v0.1.0-windows-x86_64.zip    # Windows 팀원용
+├── embtool-v0.1.0-linux-x86_64.tar.gz   # CI/CD 서버용
+└── embtool-v0.1.0-linux-aarch64.tar.gz  # ARM CI 서버용 (선택)
+
+사내 배포:
+├── FTP: ftp://server/tools/embtool/     # 사내 미러
+└── GitLab: 패키지 레지스트리 (선택)
+```
+
+### CI/CD 크로스 컴파일 (GitHub Actions)
+```yaml
+# .github/workflows/release.yml
+strategy:
+  matrix:
+    include:
+      - target: x86_64-unknown-linux-gnu
+        os: ubuntu-latest
+      - target: x86_64-pc-windows-msvc
+        os: windows-latest
+```
+
+---
+
+*기획서 v0.2 - 2026-03-08*
