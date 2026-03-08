@@ -38,9 +38,15 @@ enum Commands {
     New {
         /// Project name
         name: String,
-        /// Target MCU (e.g., k22f, k64, k66)
+        /// Target MCU (e.g., k10d, k12, k22f, k64, k66)
         #[arg(long)]
         mcu: String,
+        /// Project type: application, bootloader, library
+        #[arg(long, default_value = "application")]
+        r#type: String,
+        /// Toolchain spec (e.g., nxp:14.2). Defaults to config default
+        #[arg(long)]
+        toolchain: Option<String>,
     },
 
     /// Build the current project
@@ -93,10 +99,8 @@ fn main() {
             ToolchainAction::Remove { spec } => commands::toolchain::remove(&spec),
         },
 
-        Commands::New { name, mcu } => {
-            println!("🆕 Creating project '{}' for MCU '{}'...", name, mcu);
-            println!("   (Not yet implemented)");
-            Ok(())
+        Commands::New { name, mcu, r#type, toolchain } => {
+            commands::new::run(&name, &mcu, &r#type, toolchain.as_deref())
         }
 
         Commands::Build => {
