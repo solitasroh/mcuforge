@@ -1,6 +1,7 @@
 mod commands;
 mod core;
 mod mcu;
+mod ui;
 mod utils;
 
 use clap::{Parser, Subcommand};
@@ -105,16 +106,46 @@ fn main() {
         }
 
         Commands::Config => {
+            use iocraft::prelude::*;
             match core::config::load() {
                 Ok(config) => {
-                    println!("⚙️  embtool configuration:");
-                    println!("   Toolchain default: {:?}", config.toolchain.default);
-                    println!("   Registry URL: {}", config.registry.url);
-                    println!("   Mirror enabled: {}", config.mirror.enabled);
-                    if config.mirror.enabled {
-                        println!("   Mirror URL: {}", config.mirror.url);
-                        println!("   Mirror fallback: {}", config.mirror.fallback);
-                    }
+                    ui::render(element! {
+                        View(flex_direction: FlexDirection::Column) {
+                            ui::Header(
+                                title: "embtool config".to_string(),
+                            )
+                            ui::Section(title: "Toolchain".to_string()) {
+                                ui::Entry(
+                                    label: "Default".to_string(),
+                                    value: config.toolchain.default.unwrap_or_else(|| "(none)".to_string()),
+                                )
+                            }
+                            ui::Section(title: "Registry".to_string()) {
+                                ui::Entry(
+                                    label: "URL".to_string(),
+                                    value: config.registry.url.clone(),
+                                )
+                                ui::Entry(
+                                    label: "Cache TTL".to_string(),
+                                    value: format!("{}h", config.registry.cache_ttl_hours),
+                                )
+                            }
+                            ui::Section(title: "Mirror".to_string()) {
+                                ui::Entry(
+                                    label: "Enabled".to_string(),
+                                    value: config.mirror.enabled.to_string(),
+                                )
+                                ui::Entry(
+                                    label: "URL".to_string(),
+                                    value: if config.mirror.url.is_empty() { "(none)".to_string() } else { config.mirror.url },
+                                )
+                                ui::Entry(
+                                    label: "Fallback".to_string(),
+                                    value: config.mirror.fallback.to_string(),
+                                )
+                            }
+                        }
+                    });
                     Ok(())
                 }
                 Err(e) => Err(e),

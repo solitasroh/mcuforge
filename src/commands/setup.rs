@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
-use colored::*;
+use iocraft::prelude::*;
 
 use crate::core::{config, project};
+use crate::ui::{self, Entry, Header, Section, SectionVariant, StatusLine, StatusVariant};
 use crate::utils::paths;
 
 pub fn run(ci: bool, force: bool) -> Result<()> {
@@ -13,24 +14,26 @@ pub fn run(ci: bool, force: bool) -> Result<()> {
     let project_dir = project_path.parent().unwrap();
     let proj = project::load(&project_path)?;
 
-    println!("{} Reading embtool.toml...", "🔍".bold());
-    println!("   Project: {}", proj.project.name.cyan());
-    println!(
-        "   MCU: {} ({})",
-        proj.target.mcu.cyan(),
-        proj.target.core
-    );
-    println!(
-        "   Toolchain: {}",
-        proj.toolchain.id().cyan()
-    );
-    println!();
-
     // 3. Load global config
     let _global_config = config::load()?;
     let is_ci = ci || config::is_ci();
 
-    // 4. Check if toolchain is installed
+    // 4. Render project info
+    ui::render(element! {
+        View(flex_direction: FlexDirection::Column) {
+            Header(
+                title: "embtool setup".to_string(),
+                subtitle: Some(project_dir.display().to_string()),
+            )
+            Section(title: "Project".to_string()) {
+                Entry(label: "Name".to_string(), value: proj.project.name.clone())
+                Entry(label: "MCU".to_string(), value: format!("{} ({})", proj.target.mcu, proj.target.core))
+                Entry(label: "Toolchain".to_string(), value: proj.toolchain.id())
+            }
+        }
+    });
+
+    // 5. Check if toolchain is installed
     let tc_path = paths::toolchain_path(&proj.toolchain.vendor, &proj.toolchain.version)?;
     let gcc_name = if cfg!(windows) {
         "arm-none-eabi-gcc.exe"
@@ -39,51 +42,66 @@ pub fn run(ci: bool, force: bool) -> Result<()> {
     };
 
     if tc_path.join("bin").join(gcc_name).exists() && !force {
-        println!(
-            "{} Toolchain {} already installed at {}",
-            "✅".bold(),
-            proj.toolchain.id().green(),
-            tc_path.display()
-        );
+        ui::render(element! {
+            StatusLine(
+                icon: "✓".to_string(),
+                message: format!("Toolchain {} installed", proj.toolchain.id()),
+                variant: StatusVariant::Success,
+            )
+        });
     } else {
-        println!(
-            "{} Toolchain {} not found locally.",
-            "📦".bold(),
-            proj.toolchain.id().yellow()
-        );
-        if is_ci {
-            println!("   CI mode: will auto-install");
-        }
+        ui::render(element! {
+            StatusLine(
+                icon: "!".to_string(),
+                message: format!(
+                    "Toolchain {} not found{}",
+                    proj.toolchain.id(),
+                    if is_ci { " (CI: will auto-install)" } else { "" }
+                ),
+                variant: StatusVariant::Warning,
+            )
+        });
         // TODO: Call toolchain_manager::install() when implemented
-        println!(
-            "   {}",
-            "(toolchain install not yet implemented — run 'embtool toolchain install' manually)"
-                .dimmed()
-        );
-        println!();
+        ui::render(element! {
+            StatusLine(
+                icon: "→".to_string(),
+                message: "Run 'embtool toolchain install' to install".to_string(),
+                variant: StatusVariant::Muted,
+            )
+        });
     }
 
-    // 5. Generate arm-toolchain.cmake
+    // 6. Generate arm-toolchain.cmake
     let cmake_path = project_dir.join("arm-toolchain.cmake");
     if cmake_path.exists() && !force {
-        println!(
-            "{} arm-toolchain.cmake already exists (use --force to overwrite)",
-            "ℹ️ ".bold()
-        );
+        ui::render(element! {
+            StatusLine(
+                icon: "·".to_string(),
+                message: "arm-toolchain.cmake exists (use --force to overwrite)".to_string(),
+                variant: StatusVariant::Muted,
+            )
+        });
     } else {
         generate_toolchain_cmake(&cmake_path, &proj)?;
-        println!(
-            "{} Generated arm-toolchain.cmake",
-            "🔧".bold()
-        );
+        ui::render(element! {
+            StatusLine(
+                icon: "✓".to_string(),
+                message: "Generated arm-toolchain.cmake".to_string(),
+                variant: StatusVariant::Success,
+            )
+        });
     }
 
     println!();
-    println!(
-        "{} Setup complete! Run '{}' to build.",
-        "✅".bold(),
-        "embtool build".green()
-    );
+    ui::render(element! {
+        Section(title: "Ready".to_string(), variant: SectionVariant::Success) {
+            StatusLine(
+                icon: "→".to_string(),
+                message: "Run 'embtool build' to build the project".to_string(),
+                variant: StatusVariant::Info,
+            )
+        }
+    });
 
     Ok(())
 }
