@@ -54,7 +54,12 @@ pub struct ToolVersionConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectMeta {
     pub name: String,
+    #[serde(default = "default_project_version")]
     pub version: String,
+}
+
+fn default_project_version() -> String {
+    "0.1.0".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
