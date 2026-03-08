@@ -102,41 +102,70 @@ pub fn list(available: bool) -> Result<()> {
         println!();
         match config::load().and_then(|c| toolchain_registry::fetch_manifest(&c)) {
             Ok(manifest) => {
-                let versions = toolchain_registry::available_versions(&manifest);
                 let platform = toolchain_registry::platform_key();
 
-                ui::render(element! {
-                    Section(title: "Available (remote)".to_string()) {
-                        #(versions.iter().map(|(vendor, version, gcc)| {
-                            let entry = manifest.toolchains.iter()
-                                .find(|t| t.vendor == *vendor && t.version == *version);
-                            let has_platform = entry
-                                .and_then(|e| e.assets.get(platform))
-                                .and_then(|a| a.as_ref())
-                                .is_some();
+                // Filter: only show toolchains available for current platform
+                let available_entries: Vec<_> = manifest.toolchains.iter()
+                    .filter(|t| {
+                        t.assets.get(platform)
+                            .and_then(|a| a.as_ref())
+                            .is_some()
+                    })
+                    .collect();
 
-                            let status = if has_platform { "✓" } else { "—" };
+                if available_entries.is_empty() {
+                    ui::render(element! {
+                        Section(title: format!("Available for {}", platform)) {
+                            StatusLine(
+                                icon: "·".to_string(),
+                                message: "No toolchains available for this platform".to_string(),
+                                variant: StatusVariant::Muted,
+                            )
+                        }
+                    });
+                } else {
+                    // Check which ones are already installed
+                    let installed_names: Vec<String> = toolchain_manager::list()
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|t| t.name.clone())
+                        .collect();
 
-                            element! {
-                                View(flex_direction: FlexDirection::Row) {
-                                    View(width: 8) {
-                                        Text(content: vendor.to_string(), color: Some(Color::Cyan))
+                    ui::render(element! {
+                        Section(title: format!("Available for {}", platform)) {
+                            #(available_entries.iter().map(|entry| {
+                                let name = format!("{}-{}", entry.vendor, entry.version);
+                                let is_installed = installed_names.contains(&name);
+                                let asset = entry.assets.get(platform).unwrap().as_ref().unwrap();
+                                let size_mb = asset.size / (1024 * 1024);
+
+                                element! {
+                                    View(flex_direction: FlexDirection::Row) {
+                                        View(width: 3) {
+                                            Text(
+                                                content: if is_installed { "✓ ".to_string() } else { "  ".to_string() },
+                                                color: Some(Color::Green),
+                                            )
+                                        }
+                                        View(width: 8) {
+                                            Text(content: entry.vendor.to_string(), color: Some(Color::Cyan))
+                                        }
+                                        View(width: 12) {
+                                            Text(content: entry.version.to_string(), weight: Weight::Bold)
+                                        }
+                                        View(width: 14) {
+                                            Text(content: format!("gcc {}", entry.gcc), color: Some(Color::DarkGrey))
+                                        }
+                                        Text(
+                                            content: format!("{} MB", size_mb),
+                                            color: Some(Color::DarkGrey),
+                                        )
                                     }
-                                    View(width: 12) {
-                                        Text(content: version.to_string(), weight: Weight::Bold)
-                                    }
-                                    View(width: 12) {
-                                        Text(content: format!("gcc {}", gcc), color: Some(Color::DarkGrey))
-                                    }
-                                    Text(
-                                        content: format!("{} {}", status, platform),
-                                        color: Some(if has_platform { Color::Green } else { Color::DarkGrey }),
-                                    )
                                 }
-                            }
-                        }))
-                    }
-                });
+                            }))
+                        }
+                    });
+                }
             }
             Err(e) => {
                 ui::render(element! {
