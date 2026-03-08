@@ -56,6 +56,12 @@ pub struct ProjectMeta {
     pub name: String,
     #[serde(default = "default_project_version")]
     pub version: String,
+    #[serde(default = "default_project_type", rename = "type")]
+    pub project_type: String,
+}
+
+fn default_project_type() -> String {
+    "application".to_string()
 }
 
 fn default_project_version() -> String {
@@ -290,6 +296,7 @@ interface = "swd"
             project: ProjectMeta {
                 name: "test".to_string(),
                 version: "0.1.0".to_string(),
+                project_type: "application".to_string(),
             },
             target: TargetConfig {
                 mcu: "MK64FN1M0VLL12".to_string(),
