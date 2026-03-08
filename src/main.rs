@@ -34,6 +34,25 @@ enum Commands {
         action: ToolchainAction,
     },
 
+    /// Initialize embtool in an existing project directory
+    Init {
+        /// Target MCU (e.g., k10d, k12, k22f, k64, k66)
+        #[arg(long)]
+        mcu: String,
+        /// Project type: application, bootloader, library
+        #[arg(long, default_value = "application")]
+        r#type: String,
+        /// Toolchain spec (e.g., nxp:14.2)
+        #[arg(long)]
+        toolchain: Option<String>,
+        /// CMake version (e.g., 3.28)
+        #[arg(long)]
+        cmake: Option<String>,
+        /// Add clang-format and clang-tidy with this version (e.g., 18)
+        #[arg(long)]
+        with_clang: Option<String>,
+    },
+
     /// Create a new embedded project
     New {
         /// Project name
@@ -182,6 +201,10 @@ fn main() {
                 commands::tool::remove(&name, &version)
             }
         },
+
+        Commands::Init { mcu, r#type, toolchain, cmake, with_clang } => {
+            commands::init::run(&mcu, &r#type, toolchain.as_deref(), cmake.as_deref(), with_clang.as_deref())
+        }
 
         Commands::New { name, mcu, r#type, toolchain } => {
             commands::new::run(&name, &mcu, &r#type, toolchain.as_deref())
