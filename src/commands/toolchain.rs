@@ -86,9 +86,20 @@ pub fn list(available: bool) -> Result<()> {
         });
     } else {
         for tc in &installed {
+            // Generate shorthand spec: "nxp:14.2" from "nxp-14.2.1"
+            let spec = {
+                let parts: Vec<&str> = tc.version.splitn(3, '.').collect();
+                if parts.len() >= 2 {
+                    format!("{}:{}.{}", tc.vendor, parts[0], parts[1])
+                } else {
+                    format!("{}:{}", tc.vendor, tc.version)
+                }
+            };
+
             ui::render(element! {
                 ToolchainRow(
                     name: tc.name.clone(),
+                    spec: spec,
                     gcc_version: tc.gcc_version.clone(),
                     size: format!("{} MB", tc.size_mb),
                     source: String::new(),

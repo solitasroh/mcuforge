@@ -152,6 +152,7 @@ pub fn Header<'a>(props: &HeaderProps) -> impl Into<AnyElement<'a>> + use<'a> {
 #[derive(Default, Props)]
 pub struct ToolchainRowProps {
     pub name: String,
+    pub spec: String,
     pub gcc_version: String,
     pub size: String,
     pub source: String,
@@ -184,7 +185,13 @@ pub fn ToolchainRow<'a>(props: &ToolchainRowProps) -> impl Into<AnyElement<'a>> 
             View(width: 10) {
                 Text(content: props.size.clone(), color: Some(Theme::MUTED))
             }
-            Text(content: props.source.clone(), color: Some(Theme::MUTED))
+            #(if !props.spec.is_empty() {
+                Some(element! {
+                    Text(content: props.spec.clone(), color: Some(Theme::MUTED))
+                })
+            } else {
+                None
+            })
         }
     }
 }
