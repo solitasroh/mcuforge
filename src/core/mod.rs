@@ -1,6 +1,10 @@
+pub mod clang_provider;
+pub mod cmake_provider;
 pub mod config;
 pub mod mcu_db;
 pub mod project;
 pub mod template;
+pub mod tool_manager;
+pub mod tool_provider;
 pub mod toolchain_manager;
 pub mod toolchain_registry;

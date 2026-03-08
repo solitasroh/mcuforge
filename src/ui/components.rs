@@ -180,7 +180,7 @@ pub fn ToolchainRow<'a>(props: &ToolchainRowProps) -> impl Into<AnyElement<'a>> 
                 Text(content: props.name.clone(), color: name_color, weight: Weight::Bold)
             }
             View(width: 14) {
-                Text(content: format!("gcc {}", props.gcc_version), color: Some(Theme::MUTED))
+                Text(content: format!("v{}", props.gcc_version), color: Some(Theme::MUTED))
             }
             View(width: 10) {
                 Text(content: props.size.clone(), color: Some(Theme::MUTED))

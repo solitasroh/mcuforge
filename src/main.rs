@@ -49,11 +49,70 @@ enum Commands {
         toolchain: Option<String>,
     },
 
+    /// Manage CMake versions
+    Cmake {
+        #[command(subcommand)]
+        action: CmakeAction,
+    },
+
+    /// Manage development tools (clang-format, clang-tidy)
+    Tool {
+        #[command(subcommand)]
+        action: ToolAction,
+    },
+
     /// Build the current project
     Build,
 
     /// Show embtool configuration
     Config,
+}
+
+#[derive(Subcommand)]
+enum CmakeAction {
+    /// Install a CMake version (e.g., 3.28, latest)
+    Install {
+        /// Version spec (e.g., 3.28, 3.28.6, latest)
+        version: Option<String>,
+        #[arg(long)]
+        force: bool,
+    },
+    /// List installed CMake versions
+    List {
+        #[arg(long)]
+        available: bool,
+    },
+    /// Remove a CMake version
+    Remove {
+        version: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ToolAction {
+    /// Install a tool (e.g., clang-format 18, clang-tidy 22)
+    Install {
+        /// Tool name (clang-format, clang-tidy)
+        name: String,
+        /// Version (e.g., 18, 22)
+        version: Option<String>,
+        #[arg(long)]
+        force: bool,
+    },
+    /// List installed tools
+    List {
+        /// Filter by tool name
+        name: Option<String>,
+        #[arg(long)]
+        available: bool,
+    },
+    /// Remove a tool version
+    Remove {
+        /// Tool name
+        name: String,
+        /// Version to remove
+        version: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -97,6 +156,31 @@ fn main() {
             ToolchainAction::List { available } => commands::toolchain::list(available),
             ToolchainAction::Use { spec } => commands::toolchain::use_version(&spec),
             ToolchainAction::Remove { spec } => commands::toolchain::remove(&spec),
+        },
+
+        Commands::Cmake { action } => match action {
+            CmakeAction::Install { version, force } => {
+                commands::cmake::install(version.as_deref(), force)
+            }
+            CmakeAction::List { available } => commands::cmake::list(available),
+            CmakeAction::Remove { version } => commands::cmake::remove(&version),
+        },
+
+        Commands::Tool { action } => match action {
+            ToolAction::Install { name, version, force } => {
+                commands::tool::install(&name, version.as_deref(), force)
+            }
+            ToolAction::List { name, available } => {
+                if available {
+                    let tool_name = name.as_deref().unwrap_or("clang-format");
+                    commands::tool::list_available(tool_name)
+                } else {
+                    commands::tool::list(name.as_deref())
+                }
+            }
+            ToolAction::Remove { name, version } => {
+                commands::tool::remove(&name, &version)
+            }
         },
 
         Commands::New { name, mcu, r#type, toolchain } => {
