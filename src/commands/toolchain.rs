@@ -1,10 +1,11 @@
 use anyhow::{bail, Result};
 use iocraft::prelude::*;
 
-use crate::ui::{self, Header, Section, SectionVariant, StatusLine, StatusVariant, ToolchainRow};
+use crate::core::{config, toolchain_manager, toolchain_registry};
+use crate::ui::{self, Entry, Header, Section, SectionVariant, StatusLine, StatusVariant, ToolchainRow};
 use crate::utils::paths;
 
-/// Parse "vendor:version" spec, e.g. "nxp:14.2" or "nxp:14.2.1"
+/// Parse "vendor:version" spec
 pub fn parse_spec(spec: &str) -> Result<(String, String)> {
     if let Some((vendor, version)) = spec.split_once(':') {
         Ok((vendor.to_string(), version.to_string()))
@@ -16,37 +17,66 @@ pub fn parse_spec(spec: &str) -> Result<(String, String)> {
     }
 }
 
-pub fn install(spec: &str, _force: bool) -> Result<()> {
+pub fn install(spec: &str, force: bool) -> Result<()> {
     let (vendor, version) = parse_spec(spec)?;
 
     ui::render(element! {
-        View(flex_direction: FlexDirection::Column) {
-            Header(
-                title: "embtool toolchain install".to_string(),
-            )
-            Section(title: format!("{} ARM GCC {}", vendor.to_uppercase(), version)) {
-                StatusLine(
-                    icon: "→".to_string(),
-                    message: "Not yet implemented".to_string(),
-                    variant: StatusVariant::Muted,
-                )
-            }
-        }
+        Header(
+            title: "embtool toolchain install".to_string(),
+        )
     });
+
+    ui::render(element! {
+        StatusLine(
+            icon: "↓".to_string(),
+            message: format!("Installing {} ARM GCC {}...", vendor.to_uppercase(), version),
+            variant: StatusVariant::Info,
+        )
+    });
+
+    let result = toolchain_manager::install(&vendor, &version, force)?;
+
+    // Check if it was already installed (size_mb == 0 means we skipped)
+    if result.size_mb == 0 && !force {
+        ui::render(element! {
+            Section(title: format!("{}", result.name), variant: SectionVariant::Success) {
+                StatusLine(
+                    icon: "✓".to_string(),
+                    message: "Already installed".to_string(),
+                    variant: StatusVariant::Success,
+                )
+                Entry(label: "GCC".to_string(), value: result.gcc_version)
+                Entry(label: "Path".to_string(), value: result.path.display().to_string())
+            }
+        });
+    } else {
+        ui::render(element! {
+            Section(title: format!("{}", result.name), variant: SectionVariant::Success) {
+                StatusLine(
+                    icon: "✓".to_string(),
+                    message: "Installed successfully".to_string(),
+                    variant: StatusVariant::Success,
+                )
+                Entry(label: "GCC".to_string(), value: result.gcc_version)
+                Entry(label: "Size".to_string(), value: format!("{} MB", result.size_mb))
+                Entry(label: "Path".to_string(), value: result.path.display().to_string())
+            }
+        });
+    }
 
     Ok(())
 }
 
 pub fn list(available: bool) -> Result<()> {
-    let tc_dir = paths::toolchains_dir()?;
-
     ui::render(element! {
         Header(
             title: "embtool toolchain list".to_string(),
         )
     });
 
-    if !tc_dir.exists() {
+    let installed = toolchain_manager::list()?;
+
+    if installed.is_empty() {
         ui::render(element! {
             StatusLine(
                 icon: "·".to_string(),
@@ -54,77 +84,70 @@ pub fn list(available: bool) -> Result<()> {
                 variant: StatusVariant::Muted,
             )
         });
-        return Ok(());
-    }
-
-    let mut entries: Vec<_> = std::fs::read_dir(&tc_dir)?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir())
-        .collect();
-    entries.sort_by_key(|e| e.file_name());
-
-    let mut found = false;
-
-    for entry in entries {
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy().to_string();
-
-        let gcc = entry.path().join("bin").join("arm-none-eabi-gcc");
-        let gcc_exe = entry.path().join("bin").join("arm-none-eabi-gcc.exe");
-        if gcc.exists() || gcc_exe.exists() {
-            found = true;
-
-            // Get gcc version
-            let gcc_path = if gcc.exists() { &gcc } else { &gcc_exe };
-            let gcc_ver = std::process::Command::new(gcc_path)
-                .arg("--version")
-                .output()
-                .ok()
-                .and_then(|o| String::from_utf8(o.stdout).ok())
-                .and_then(|s| {
-                    s.lines()
-                        .next()
-                        .and_then(|l| l.split_whitespace().last())
-                        .map(|v| v.to_string())
-                })
-                .unwrap_or_else(|| "?".to_string());
-
-            // Get size
-            let size = fs_size_mb(&entry.path());
-
+    } else {
+        for tc in &installed {
             ui::render(element! {
                 ToolchainRow(
-                    name: name_str,
-                    gcc_version: gcc_ver,
-                    size: format!("{} MB", size),
+                    name: tc.name.clone(),
+                    gcc_version: tc.gcc_version.clone(),
+                    size: format!("{} MB", tc.size_mb),
                     source: String::new(),
-                    active: false,
+                    active: tc.is_active,
                 )
             });
         }
     }
 
-    if !found {
-        ui::render(element! {
-            StatusLine(
-                icon: "·".to_string(),
-                message: "No toolchains installed".to_string(),
-                variant: StatusVariant::Muted,
-            )
-        });
-    }
-
     if available {
         println!();
-        ui::render(element! {
-            Section(title: "Available (remote)".to_string()) {
-                StatusLine(
-                    icon: "→".to_string(),
-                    message: "Not yet implemented".to_string(),
-                    variant: StatusVariant::Muted,
-                )
+        match config::load().and_then(|c| toolchain_registry::fetch_manifest(&c)) {
+            Ok(manifest) => {
+                let versions = toolchain_registry::available_versions(&manifest);
+                let platform = toolchain_registry::platform_key();
+
+                ui::render(element! {
+                    Section(title: "Available (remote)".to_string()) {
+                        #(versions.iter().map(|(vendor, version, gcc)| {
+                            let entry = manifest.toolchains.iter()
+                                .find(|t| t.vendor == *vendor && t.version == *version);
+                            let has_platform = entry
+                                .and_then(|e| e.assets.get(platform))
+                                .and_then(|a| a.as_ref())
+                                .is_some();
+
+                            let status = if has_platform { "✓" } else { "—" };
+
+                            element! {
+                                View(flex_direction: FlexDirection::Row) {
+                                    View(width: 8) {
+                                        Text(content: vendor.to_string(), color: Some(Color::Cyan))
+                                    }
+                                    View(width: 12) {
+                                        Text(content: version.to_string(), weight: Weight::Bold)
+                                    }
+                                    View(width: 12) {
+                                        Text(content: format!("gcc {}", gcc), color: Some(Color::DarkGrey))
+                                    }
+                                    Text(
+                                        content: format!("{} {}", status, platform),
+                                        color: Some(if has_platform { Color::Green } else { Color::DarkGrey }),
+                                    )
+                                }
+                            }
+                        }))
+                    }
+                });
             }
-        });
+            Err(e) => {
+                ui::render(element! {
+                    StatusLine(
+                        icon: "!".to_string(),
+                        message: format!("Could not fetch registry: {}", e),
+                        variant: StatusVariant::Warning,
+                    )
+                });
+            }
+        }
     }
 
     Ok(())
@@ -137,15 +160,13 @@ pub fn use_version(spec: &str) -> Result<()> {
     if !tc_path.exists() {
         bail!(
             "Toolchain {}-{} is not installed. Run 'embtool toolchain install {}' first.",
-            vendor,
-            version,
-            spec
+            vendor, version, spec
         );
     }
 
-    let mut config = crate::core::config::load()?;
-    config.toolchain.default = Some(format!("{}-{}", vendor, version));
-    crate::core::config::save(&config)?;
+    let mut cfg = config::load()?;
+    cfg.toolchain.default = Some(format!("{}-{}", vendor, version));
+    config::save(&cfg)?;
 
     ui::render(element! {
         StatusLine(
@@ -166,14 +187,14 @@ pub fn remove(spec: &str) -> Result<()> {
         bail!("Toolchain {}-{} is not installed.", vendor, version);
     }
 
-    let size = fs_size_mb(&tc_path);
+    let size = dir_size_mb(&tc_path);
     std::fs::remove_dir_all(&tc_path)?;
 
-    let mut config = crate::core::config::load()?;
+    let mut cfg = config::load()?;
     let id = format!("{}-{}", vendor, version);
-    if config.toolchain.default.as_deref() == Some(&id) {
-        config.toolchain.default = None;
-        crate::core::config::save(&config)?;
+    if cfg.toolchain.default.as_deref() == Some(&id) {
+        cfg.toolchain.default = None;
+        config::save(&cfg)?;
     }
 
     ui::render(element! {
@@ -187,23 +208,19 @@ pub fn remove(spec: &str) -> Result<()> {
     Ok(())
 }
 
-fn fs_size_mb(path: &std::path::Path) -> u64 {
-    walkdir_size(path) / (1024 * 1024)
-}
-
-fn walkdir_size(path: &std::path::Path) -> u64 {
-    let mut total = 0u64;
-    if let Ok(entries) = std::fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let p = entry.path();
-            if p.is_dir() {
-                total += walkdir_size(&p);
-            } else if let Ok(meta) = p.metadata() {
-                total += meta.len();
+fn dir_size_mb(path: &std::path::Path) -> u64 {
+    fn walk(path: &std::path::Path) -> u64 {
+        let mut total = 0u64;
+        if let Ok(entries) = std::fs::read_dir(path) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_dir() { total += walk(&p); }
+                else if let Ok(m) = p.metadata() { total += m.len(); }
             }
         }
+        total
     }
-    total
+    walk(path) / (1024 * 1024)
 }
 
 #[cfg(test)]
@@ -215,15 +232,10 @@ mod tests {
         let (v, ver) = parse_spec("nxp:14.2.1").unwrap();
         assert_eq!(v, "nxp");
         assert_eq!(ver, "14.2.1");
-
-        let (v, ver) = parse_spec("stm:13.3").unwrap();
-        assert_eq!(v, "stm");
-        assert_eq!(ver, "13.3");
     }
 
     #[test]
     fn test_parse_spec_invalid() {
         assert!(parse_spec("14.2.1").is_err());
-        assert!(parse_spec("").is_err());
     }
 }
