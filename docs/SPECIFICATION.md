@@ -1,8 +1,8 @@
 # embtool 상세 기획서
 
-> **버전**: v0.2 Draft
+> **버전**: v0.3 Draft
 > **작성일**: 2026-03-08
-> **작성자**: 노수장 / 앨리스
+> **작성자**: 노수장
 
 ---
 
@@ -15,11 +15,11 @@
 ┌─────────────────────────────────────────────────────────┐
 │ 1. NXP IDE 설치 → SDK 다운로드                           │
 │ 2. SDK에서 ARM GCC 툴체인 추출                            │
-│ 3. 툴체인을 사내 FTP 서버에 업로드                          │
+│ 3. 툴체인을 사내 서버에 업로드                              │
 │ 4. 프로젝트 디렉토리 수동 생성                              │
 │ 5. CMakeLists.txt 수동 작성                               │
 │ 6. arm-toolchain.cmake 수동 작성                          │
-│ 7. CMake에서 FTP로 툴체인 다운로드 → 프로젝트 내부 배치       │
+│ 7. CMake에서 툴체인 다운로드 → 프로젝트 내부 배치              │
 │ 8. 빌드 & 디버그 (PEMicro)                                │
 └─────────────────────────────────────────────────────────┘
 
@@ -85,7 +85,7 @@ a2550mcu/
 • 개발 OS: Windows (MCU 개발)
 • CI/CD: GitLab CI 또는 Jenkins (Linux 컨테이너/에이전트)
 • 네트워크: 외부 인터넷 접근 가능
-• 현재 배포: 사내 FTP → CMake 스텝에서 자동 다운로드
+• 현재 배포: 사내 서버 → CMake 스텝에서 자동 다운로드
 ```
 
 **팀 워크플로우 요구사항:**
@@ -94,7 +94,7 @@ a2550mcu/
 ┌────────────────────────┐          ┌────────────────────────┐
 │ 1. IDE 설치 (1시간)     │          │ 1. embtool.exe 설치    │
 │ 2. SDK 다운로드 (30분)  │          │ 2. git clone project   │
-│ 3. FTP 경로 확인       │          │ 3. embtool setup       │
+│ 3. 서버 경로 확인      │          │ 3. embtool setup       │
 │ 4. CMake 환경 설정     │          │    → 끝! (5분)         │
 │ 5. 빌드 테스트/디버그   │          └────────────────────────┘
 │ 6. 경로 안 맞으면 삽질  │
@@ -149,7 +149,7 @@ embtool이 해결하는 것:
 ```
 AS-IS:                          TO-BE:
 IDE 설치 → SDK 추출             embtool toolchain install 13.3
-FTP 업로드                       (자동 다운로드 & 관리)
+수동 업로드                       (자동 다운로드 & 관리)
 수동 디렉토리 생성               embtool new my-project --mcu k64
 CMake 수동 작성                  (자동 생성)
 경로 하드코딩                    embtool build
@@ -174,12 +174,13 @@ $ embtool setup
 🔍 Reading embtool.toml...
    Project: a2750lm_application
    MCU: MK64FN1M0VLL12 (Cortex-M4)
-   Required toolchain: 13.3.rel1
+   Required toolchain: nxp-14.2.1
 
-📦 Toolchain 13.3.rel1 not found locally.
-   Downloading from ARM official...
-   [████████████████████████████████] 100% (245 MB)
-   Installing to C:\Users\{user}\.embtool\toolchains\13.3.rel1\
+📦 Toolchain nxp-14.2.1 not found locally.
+   Downloading nxp-14.2.1-win-x64.7z (118 MB)
+   [████████████████████████████████] 100% (118/118 MB)
+   Verifying SHA256... ✅
+   Installing to C:\Users\{user}\.embtool\toolchains\nxp-14.2.1\
 
 🔧 Generating arm-toolchain.cmake...
 ✅ Setup complete! Run 'embtool build' to build.
@@ -214,7 +215,7 @@ if(WIN32)
 else()
     set(EMBTOOL_HOME "$ENV{HOME}/.embtool")
 endif()
-set(ARM_TOOLCHAIN_ROOT "${EMBTOOL_HOME}/toolchains/13.3.rel1")
+set(ARM_TOOLCHAIN_ROOT "${EMBTOOL_HOME}/toolchains/nxp-14.2.1")
 ```
 
 #### CI/CD 모드
@@ -240,101 +241,143 @@ CI/CD 설치 (Dockerfile/스크립트):
    chmod +x /usr/local/bin/embtool
 
 사내 배포 (대안):
-   FTP에 embtool 바이너리도 같이 올려서 배포
+   사내 공유 폴더에 embtool 바이너리도 같이 올려서 배포
 ```
 
 ---
 
 ### 3.1 Phase 1: 툴체인 관리 (MVP)
 
-#### `embtool toolchain install <version>`
-```bash
-# ARM GNU Toolchain 설치 (developer.arm.com에서 자동 다운로드)
-$ embtool toolchain install 13.3
-📦 Downloading ARM GNU Toolchain 13.3.rel1...
-   [████████████████████████████████] 100% (245 MB)
-📂 Installing to ~/.embtool/toolchains/13.3.rel1/
-✅ ARM GNU Toolchain 13.3.rel1 installed successfully
-   arm-none-eabi-gcc 13.3.1
+#### 툴체인 배포 아키텍처
 
-# 특정 버전 설치
-$ embtool toolchain install 12.2
-$ embtool toolchain install 10.3
+```
+embtool-toolchains (GitHub, 메타데이터 리포):
+  https://github.com/solitasroh/embtool-toolchains
+  └── versions.json          ← 버전/해시/URL 메타데이터
+
+Cloudflare R2 (바이너리 저장소, 인증 불필요):
+  https://pub-25d9755030a54c3280b7a9f68e9bf67c.r2.dev/
+  ├── versions.json
+  ├── nxp-14.2.1-linux-x64.7z
+  ├── nxp-14.2.1-win-x64.7z
+  ├── nxp-13.2.1-win-x64.7z
+  └── stm-13.3.1-win-x64.7z
+
+사내 NAS 미러 (선택, 우선순위 높음):
+  \\nas\share\embtool\toolchains\
+  └── (R2와 동일 구조)
+```
+
+**다운로드 우선순위:**
+```
+1. mirror.enabled → NAS/사내 서버에서 (인증X, 최고속)
+2. mirror 실패 + fallback → R2에서 다운로드
+3. mirror.enabled=false → R2 직접 (기본)
+```
+
+#### 벤더별 툴체인
+
+| 벤더 | 버전 | GCC | 특이사항 | Win | Linux |
+|------|------|-----|---------|-----|-------|
+| **NXP** | 14.2.1 | 14.2.1 | redlib, NXP features, newlib-nano | ✅ | ✅ |
+| **NXP** | 13.2.1 | 13.2.1 | redlib, NXP features, newlib-nano | ✅ | - |
+| **STM** | 13.3.1 | 13.3.1 | newlib-nano (순수 ARM GCC) | ✅ | - |
+
+#### `embtool toolchain install <vendor:version>`
+```bash
+# NXP 툴체인 설치
+$ embtool toolchain install nxp:14.2
+📦 Installing NXP ARM GCC 14.2.1...
+   Downloading nxp-14.2.1-win-x64.7z (118 MB)
+   [████████████████████████████████] 100% (118/118 MB)
+   Verifying SHA256... ✅
+📂 Installing to ~/.embtool/toolchains/nxp-14.2.1/
+✅ NXP ARM GCC 14.2.1 installed
+   arm-none-eabi-gcc (Arm GNU Toolchain 14.2.Rel1) 14.2.1
+
+# STM 툴체인 설치
+$ embtool toolchain install stm:13.3
+
+# 벤더 생략 시 프로젝트 MCU로 자동 추론
+$ embtool toolchain install 14.2    # Kinetis 프로젝트 → nxp
 ```
 
 #### `embtool toolchain list`
 ```bash
 $ embtool toolchain list
 Installed toolchains:
-  * 13.3.rel1  (active)
-    12.2.rel1
-    10.3-2021.10
+  * nxp-14.2.1   gcc 14.2.1   (450 MB)   [NXP MCUXpresso]
+    nxp-13.2.1   gcc 13.2.1   (480 MB)   [NXP MCUXpresso]
+    stm-13.3.1   gcc 13.3.1   (420 MB)   [STM32CubeIDE]
 
-System paths:
-  /opt/Freescale/KDS_v3/toolchain  (detected, legacy)
+$ embtool toolchain list --available
+Available toolchains (remote):
+  Vendor  Version  GCC     Source                    Win   Linux
+  ──────  ───────  ──────  ────────────────────────  ────  ─────
+  nxp     14.2.1   14.2.1  MCUXpresso IDE 25.6.136  ✅    ✅
+  nxp     13.2.1   13.2.1  MCUXpresso IDE            ✅    -
+  stm     13.3.1   13.3.1  STM32CubeIDE 1.0.100     ✅    -
 ```
 
-#### `embtool toolchain use <version>`
+#### `embtool toolchain use <vendor:version>`
 ```bash
-$ embtool toolchain use 12.2
-🔄 Switched to ARM GNU Toolchain 12.2.rel1
-   arm-none-eabi-gcc 12.2.1
+$ embtool toolchain use stm:13.3
+🔄 Switched to STM ARM GCC 13.3.1
+   arm-none-eabi-gcc 13.3.1
 ```
 
-#### `embtool toolchain remove <version>`
+#### `embtool toolchain remove <vendor:version>`
 ```bash
-$ embtool toolchain remove 10.3
-🗑️  Removed ARM GNU Toolchain 10.3-2021.10
-   Freed 512 MB
+$ embtool toolchain remove nxp:13.2
+🗑️  Removed NXP ARM GCC 13.2.1
+   Freed 480 MB
 ```
 
 #### 저장 구조
 ```
 ~/.embtool/
 ├── config.toml                    # 전역 설정
-├── toolchains/
-│   ├── 13.3.rel1/
-│   │   └── arm-none-eabi/
-│   │       ├── bin/
-│   │       ├── lib/
-│   │       └── include/
-│   └── 12.2.rel1/
-│       └── arm-none-eabi/
+├── toolchains/                    # 벤더-버전 형식
+│   ├── nxp-14.2.1/
+│   │   ├── arm-none-eabi/
+│   │   ├── bin/
+│   │   ├── lib/
+│   │   ├── redlib/                # NXP 전용
+│   │   └── features/              # NXP 전용
+│   ├── nxp-13.2.1/
+│   └── stm-13.3.1/
 └── cache/                         # 다운로드 캐시
-    └── gcc-arm-none-eabi-13.3-...tar.xz
+    ├── versions.json
+    └── *.7z
 ```
 
 #### 전역 설정 (~/.embtool/config.toml)
 ```toml
 [toolchain]
-default = "13.3.rel1"
-install_dir = "~/.embtool/toolchains"
+default = "nxp-14.2.1"
 
-[toolchain.sources]
-# ARM 공식 다운로드 (기본)
-arm_gnu = "https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads"
+[registry]
+url = "https://pub-25d9755030a54c3280b7a9f68e9bf67c.r2.dev"
+cache_ttl_hours = 24               # versions.json 캐시 유효기간
 
-# 사내 FTP 미러 (팀 배포용, 우선순위 높음)
-[toolchain.mirror]
-enabled = true
-url = "ftp://192.168.x.x/toolchains/"
-# 미러에 없으면 ARM 공식에서 다운로드 (fallback)
-fallback = true
+# 사내 NAS 미러 (선택, 우선순위 높음)
+[mirror]
+enabled = false
+type = "local"                     # "local" | "http"
+url = "\\\\nas\\share\\embtool\\toolchains"   # Windows UNC
+# url = "/mnt/nas/embtool/toolchains"         # Linux mount
+fallback = true                    # 미러 실패 시 R2로
 
 [debug]
 default_probe = "pemicro"
 
 [ci]
-# CI 환경 자동 감지 (GITLAB_CI, JENKINS_URL, CI 환경변수)
 auto_detect = true
 ```
 
 #### 팀 전역 설정 공유
 ```
-팀 리더가 config.toml 템플릿을 FTP에 올려두면:
-$ embtool config import ftp://192.168.x.x/embtool/config.toml
-
-또는 프로젝트별 .embtool/config.toml 로 오버라이드:
+프로젝트별 .embtool/config.toml 로 오버라이드:
 project/
 ├── .embtool/
 │   └── config.toml      # 프로젝트별 설정 (Git 커밋)
@@ -384,7 +427,8 @@ flash = "1M"
 ram = "256K"
 
 [toolchain]
-version = "13.3.rel1"            # 프로젝트 고정 버전
+vendor = "nxp"                   # "nxp" | "stm"
+version = "14.2.1"               # 프로젝트 고정 버전
 
 [build]
 c_standard = "c99"
@@ -417,15 +461,15 @@ interface = "swd"
 #### 자동 생성되는 arm-toolchain.cmake
 ```cmake
 # Auto-generated by embtool - DO NOT EDIT
-# Toolchain: ARM GNU 13.3.rel1
-# Run 'embtool toolchain regenerate' to update
+# Toolchain: NXP ARM GCC 14.2.1
+# Run 'embtool setup' to regenerate
 
 cmake_minimum_required(VERSION 3.20)
 
 # embtool managed toolchain path
 set(EMBTOOL_HOME "$ENV{HOME}/.embtool")
-set(EMBTOOL_TOOLCHAIN_VERSION "13.3.rel1")
-set(ARM_TOOLCHAIN_ROOT "${EMBTOOL_HOME}/toolchains/${EMBTOOL_TOOLCHAIN_VERSION}")
+set(EMBTOOL_TOOLCHAIN_ID "nxp-14.2.1")
+set(ARM_TOOLCHAIN_ROOT "${EMBTOOL_HOME}/toolchains/${EMBTOOL_TOOLCHAIN_ID}")
 set(ARM_TOOLCHAIN_PATH "${ARM_TOOLCHAIN_ROOT}/bin/")
 
 set(CMAKE_SYSTEM_NAME Generic)
@@ -617,8 +661,8 @@ src/
 │   └── stm32.rs               # STM32 MCU 정의 (향후)
 └── utils/
     ├── mod.rs
-    ├── download.rs            # HTTP/FTP 다운로드 + 진행바
-    ├── archive.rs             # tar.xz 해제
+    ├── download.rs            # HTTP 다운로드 + SHA256 검증 + 진행바
+    ├── archive.rs             # 7z 아카이브 해제
     └── paths.rs               # 경로 관리 (~/.embtool)
 ```
 
@@ -636,9 +680,8 @@ colored = "3"                                        # 터미널 색상
 dirs = "6"                                           # 시스템 디렉토리
 anyhow = "1"                                         # 에러 처리
 handlebars = "6"                                     # 템플릿 엔진
-flate2 = "1"                                         # gzip
-tar = "0.4"                                          # tar 아카이브
-xz2 = "0.1"                                          # xz 해제
+sha2 = "0.10"                                        # SHA256 검증
+serde_json = "1"                                     # versions.json 파싱
 ```
 
 ---
@@ -654,12 +697,13 @@ xz2 = "0.1"                                          # xz 해제
 - [ ] GitHub Releases 바이너리 배포 (cross-compilation)
 
 ### Phase 1: 툴체인 관리 (Week 2-3)
-- [ ] ARM GNU Toolchain 다운로드 URL 파싱 (developer.arm.com)
-- [ ] 사내 FTP 미러 우선 다운로드 + ARM 공식 fallback
-- [ ] 다운로드 + 진행바 (indicatif)
-- [ ] tar.xz / zip 해제 및 설치 (Linux: tar.xz, Windows: zip)
-- [ ] `toolchain install/list/use/remove` 구현
-- [ ] 버전 전환 (Linux: symlink, Windows: config 기반)
+- [ ] 원격 versions.json 레지스트리 파싱 (Cloudflare R2)
+- [ ] 멀티벤더 지원 (NXP, STM)
+- [ ] NAS 미러 우선 다운로드 + R2 fallback
+- [ ] 다운로드 + SHA256 검증 + 진행바 (indicatif)
+- [ ] 7z 아카이브 해제 및 설치
+- [ ] `toolchain install/list/use/remove` 구현 (vendor:version 형식)
+- [ ] 버전 전환 (config 기반)
 
 ### Phase 2: 프로젝트 생성 (Week 4-5)
 - [ ] MCU 데이터베이스 구축 (NXP Kinetis)
@@ -701,7 +745,7 @@ xz2 = "0.1"                                          # xz 해제
 | 벤더별 별도 도구 | NXP + STM32 통합 |
 | Windows 중심 | Windows 개발 + Linux CI/CD |
 | 개인 환경 구성 | `embtool setup` 팀 환경 자동 통일 |
-| FTP 수동 관리 | FTP 미러 + ARM 공식 fallback |
+| 수동 서버 관리 | R2 자동 다운로드 + NAS 미러 fallback |
 | 팀원 온보딩 반나절 | `embtool setup` 5분 |
 
 ---
@@ -716,7 +760,7 @@ GitHub Releases:
 └── embtool-v0.1.0-linux-aarch64.tar.gz  # ARM CI 서버용 (선택)
 
 사내 배포:
-├── FTP: ftp://server/tools/embtool/     # 사내 미러
+├── NAS: \\nas\share\tools\embtool\      # 사내 미러
 └── GitLab: 패키지 레지스트리 (선택)
 ```
 
@@ -734,4 +778,4 @@ strategy:
 
 ---
 
-*기획서 v0.2 - 2026-03-08*
+*기획서 v0.3 - 2026-03-08*
