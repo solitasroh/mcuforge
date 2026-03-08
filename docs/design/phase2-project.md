@@ -1,6 +1,18 @@
-# Phase 2: 프로젝트 생성
+# Phase 2: 프로젝트 생성 및 초기화
 
-> Week 4-5 · Unit 2-1 ~ 2-3
+> Week 4-5 · Unit 2-1 ~ 2-4
+
+---
+
+## `new` vs `init` 구분
+
+| | `embtool new <name>` | `embtool init` |
+|---|---|---|
+| **용도** | 새 프로젝트 처음부터 생성 | 기존 프로젝트에 embtool 적용 |
+| **디렉토리** | `./<name>/` 새로 생성 | 현재 디렉토리 사용 |
+| **소스 파일** | main.c, startup.c, linkerscript.ld 생성 | 생성하지 않음 (이미 존재) |
+| **설정 파일** | embtool.toml, CMakeLists.txt, arm-toolchain.cmake | embtool.toml, arm-toolchain.cmake |
+| **프로젝트 이름** | 인자로 지정 | 현재 디렉토리 이름 |
 
 ---
 
