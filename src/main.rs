@@ -69,6 +69,9 @@ enum Commands {
         /// Build profile: debug or release
         #[arg(long, default_value = "debug")]
         profile: String,
+        /// Shorthand for --profile release
+        #[arg(long, short)]
+        release: bool,
         /// Clean build directory first
         #[arg(long)]
         clean: bool,
@@ -216,8 +219,9 @@ fn main() {
             commands::new::run(&name, &mcu, &r#type, toolchain.as_deref())
         }
 
-        Commands::Build { profile, clean, verbose } => {
-            commands::build::run(&profile, clean, verbose)
+        Commands::Build { profile, release, clean, verbose } => {
+            let actual_profile = if release { "release" } else { &profile };
+            commands::build::run(actual_profile, clean, verbose)
         }
 
         Commands::Format { check } => commands::format::run(check),

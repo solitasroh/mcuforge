@@ -133,6 +133,9 @@ type = "{ptype}"
 [target]
 mcu = "{define}"
 core = "{core}"
+fpu = "{fpu}"
+flash = "{flash}"
+ram = "{ram}"
 
 [toolchain]
 vendor = "{vendor}"
@@ -145,6 +148,9 @@ version = "{cmake}"
         ptype = ptype.label(),
         define = mcu.define,
         core = mcu.core,
+        fpu = mcu.fpu,
+        flash = mcu.flash_str(),
+        ram = mcu.ram_str(),
         vendor = tc_vendor,
         version = tc_version,
         cmake = cmake_ver,

@@ -62,6 +62,20 @@ pub fn run(fix: bool) -> Result<()> {
         cmd.arg("--fix");
     }
 
+    // Add ARM toolchain sysroot for cross-compilation header resolution
+    if let Ok(proj) = project::load(&project_path) {
+        let tc_path = crate::utils::paths::toolchain_path(
+            &proj.toolchain.vendor,
+            &proj.toolchain.version,
+        );
+        if let Ok(tc) = tc_path {
+            let sysroot = tc.join("arm-none-eabi").join("include");
+            if sysroot.exists() {
+                cmd.arg(format!("--extra-arg=-isystem{}", sysroot.display()));
+            }
+        }
+    }
+
     // Use .clang-tidy if exists
     if project_dir.join(".clang-tidy").exists() {
         cmd.arg("--config-file").arg(project_dir.join(".clang-tidy"));

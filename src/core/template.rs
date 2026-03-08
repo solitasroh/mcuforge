@@ -113,6 +113,9 @@ type = "{ptype}"
 [target]
 mcu = "{define}"
 core = "{core}"
+fpu = "{fpu}"
+flash = "{flash}"
+ram = "{ram}"
 
 [toolchain]
 vendor = "{vendor}"
@@ -122,6 +125,9 @@ version = "{version}"
         ptype = opts.project_type.label(),
         define = opts.mcu.define,
         core = opts.mcu.core,
+        fpu = opts.mcu.fpu,
+        flash = opts.mcu.flash_str(),
+        ram = opts.mcu.ram_str(),
         vendor = opts.toolchain_vendor,
         version = opts.toolchain_version,
     )
