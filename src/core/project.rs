@@ -11,9 +11,44 @@ pub struct ProjectConfig {
     pub target: TargetConfig,
     pub toolchain: ProjectToolchain,
     #[serde(default)]
+    pub cmake: CmakeConfig,
+    #[serde(default)]
+    pub tools: ToolsConfig,
+    #[serde(default)]
     pub build: BuildConfig,
     #[serde(default)]
     pub debug: ProjectDebug,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CmakeConfig {
+    #[serde(default = "default_cmake_version")]
+    pub version: String,
+}
+
+fn default_cmake_version() -> String {
+    "3.28".to_string()
+}
+
+impl Default for CmakeConfig {
+    fn default() -> Self {
+        Self {
+            version: default_cmake_version(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ToolsConfig {
+    #[serde(default, rename = "clang-format")]
+    pub clang_format: Option<ToolVersionConfig>,
+    #[serde(default, rename = "clang-tidy")]
+    pub clang_tidy: Option<ToolVersionConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolVersionConfig {
+    pub version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -261,6 +296,8 @@ interface = "swd"
                 vendor: "nxp".to_string(),
                 version: "14.2.1".to_string(),
             },
+            cmake: CmakeConfig::default(),
+            tools: ToolsConfig::default(),
             build: BuildConfig::default(),
             debug: ProjectDebug::default(),
         };

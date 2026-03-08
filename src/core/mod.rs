@@ -1,3 +1,4 @@
+pub mod builder;
 pub mod clang_provider;
 pub mod cmake_provider;
 pub mod config;

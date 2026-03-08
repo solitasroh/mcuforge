@@ -65,7 +65,31 @@ enum Commands {
     },
 
     /// Build the current project
-    Build,
+    Build {
+        /// Build profile: debug or release
+        #[arg(long, default_value = "debug")]
+        profile: String,
+        /// Clean build directory first
+        #[arg(long)]
+        clean: bool,
+        /// Show verbose CMake output
+        #[arg(long, short)]
+        verbose: bool,
+    },
+
+    /// Format source files with clang-format
+    Format {
+        /// Check mode (exit 1 if files need formatting)
+        #[arg(long)]
+        check: bool,
+    },
+
+    /// Lint source files with clang-tidy
+    Lint {
+        /// Auto-fix issues
+        #[arg(long)]
+        fix: bool,
+    },
 
     /// Show embtool configuration
     Config,
@@ -192,11 +216,13 @@ fn main() {
             commands::new::run(&name, &mcu, &r#type, toolchain.as_deref())
         }
 
-        Commands::Build => {
-            println!("🔨 Building project...");
-            println!("   (Not yet implemented)");
-            Ok(())
+        Commands::Build { profile, clean, verbose } => {
+            commands::build::run(&profile, clean, verbose)
         }
+
+        Commands::Format { check } => commands::format::run(check),
+
+        Commands::Lint { fix } => commands::lint::run(fix),
 
         Commands::Config => {
             use iocraft::prelude::*;

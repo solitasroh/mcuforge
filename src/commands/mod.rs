@@ -1,5 +1,8 @@
+pub mod build;
 pub mod cmake;
+pub mod format;
 pub mod init;
+pub mod lint;
 pub mod new;
 pub mod setup;
 pub mod tool;
