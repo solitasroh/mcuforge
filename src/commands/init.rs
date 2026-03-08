@@ -136,7 +136,14 @@ version = "{v}"
         created.push(".gitignore");
     }
 
-    // 4. .clang-format / .clang-tidy (if --with-clang)
+    // 4. .clangd (LSP config for cross-compilation)
+    if !cwd.join(".clangd").exists() {
+        let clangd = template::generate_clangd_config(mcu.define, mcu.core, mcu.fpu);
+        std::fs::write(cwd.join(".clangd"), clangd)?;
+        created.push(".clangd");
+    }
+
+    // 5. .clang-format / .clang-tidy (if --with-clang)
     if with_clang.is_some() {
         if !cwd.join(".clang-format").exists() {
             std::fs::write(cwd.join(".clang-format"), CLANG_FORMAT_CONFIG)?;
