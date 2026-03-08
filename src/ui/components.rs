@@ -16,7 +16,9 @@ pub enum SectionVariant {
     #[default]
     Default,
     Success,
+    #[allow(dead_code)]
     Warning,
+    #[allow(dead_code)]
     Error,
 }
 
@@ -98,7 +100,9 @@ pub enum StatusVariant {
     #[default]
     Info,
     Success,
+    #[allow(dead_code)]
     Warning,
+    #[allow(dead_code)]
     Error,
     Muted,
 }

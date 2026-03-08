@@ -11,6 +11,7 @@ pub enum ArchiveType {
 
 /// Result of a tool installation
 pub struct InstallResult {
+    #[allow(dead_code)]
     pub name: String,
     pub version: String,
     pub path: PathBuf,
@@ -34,6 +35,7 @@ pub fn platform_arch() -> &'static str {
 
 /// Tool provider trait — each tool type implements this
 pub trait ToolProvider {
+    #[allow(dead_code)]
     fn name(&self) -> &str;
 
     /// Build download URL for a specific version
@@ -52,29 +54,12 @@ pub trait ToolProvider {
     fn verify_install(&self, install_path: &Path) -> Result<String>;
 
     /// SHA verification URL (if available)
+    #[allow(dead_code)]
     fn checksum_url(&self, version: &str) -> Result<Option<String>>;
 
     /// List available versions
     fn available_versions(&self) -> Result<Vec<String>>;
 }
 
-/// Get directory size in MB
-pub fn dir_size_mb(path: &Path) -> u64 {
-    fn walk(p: &Path) -> u64 {
-        let mut total = 0u64;
-        if let Ok(entries) = std::fs::read_dir(p) {
-            for entry in entries.flatten() {
-                let ep = entry.path();
-                if ep.is_dir() { total += walk(&ep); }
-                else if let Ok(m) = ep.metadata() { total += m.len(); }
-            }
-        }
-        total
-    }
-    walk(path) / (1024 * 1024)
-}
-
-/// File size in MB
-pub fn file_size_mb(path: &Path) -> u64 {
-    path.metadata().map(|m| m.len() / (1024 * 1024)).unwrap_or(0)
-}
+// Re-export from utils::fs for backward compat
+pub use crate::utils::fs::{dir_size_mb, file_size_mb};

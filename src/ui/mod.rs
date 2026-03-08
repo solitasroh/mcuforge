@@ -4,4 +4,4 @@ pub mod printer;
 
 pub use components::*;
 pub use printer::*;
-pub use theme::*;
+// theme is used internally by components

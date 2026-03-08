@@ -10,7 +10,9 @@ pub struct McuInfo {
     pub clock_mhz: u32,
     pub flash_kb: u32,
     pub ram_kb: u32,
+    #[allow(dead_code)]
     pub family: &'static str,
+    #[allow(dead_code)]
     pub series: &'static str,
     pub vendor: &'static str,
 }
@@ -41,6 +43,7 @@ pub fn list_all() -> Vec<&'static McuInfo> {
 }
 
 /// Filter by family
+#[allow(dead_code)]
 pub fn list_by_family(family: &str) -> Vec<&'static McuInfo> {
     all_mcus()
         .into_iter()

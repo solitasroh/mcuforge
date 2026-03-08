@@ -155,6 +155,7 @@ pub fn download_url(config: &GlobalConfig, asset: &AssetInfo) -> String {
 }
 
 /// List all available versions
+#[allow(dead_code)]
 pub fn available_versions(manifest: &VersionsManifest) -> Vec<(&str, &str, &str)> {
     manifest.toolchains.iter().map(|t| {
         (t.vendor.as_str(), t.version.as_str(), t.gcc.as_str())

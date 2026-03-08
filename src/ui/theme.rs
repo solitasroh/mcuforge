@@ -15,6 +15,7 @@ impl Theme {
     // Muted/dim
     pub const MUTED: Color = Color::DarkGrey;
     // Info labels
+    #[allow(dead_code)]
     pub const LABEL: Color = Color::Blue;
     // Border
     pub const BORDER: Color = Color::DarkGrey;

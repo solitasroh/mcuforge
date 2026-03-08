@@ -39,7 +39,6 @@ impl BuildProfile {
 
 #[derive(Debug)]
 pub struct BuildResult {
-    pub success: bool,
     pub elf_path: PathBuf,
     pub bin_path: Option<PathBuf>,
     pub hex_path: Option<PathBuf>,
@@ -167,7 +166,6 @@ pub fn build(
     }
 
     Ok(BuildResult {
-        success: true,
         elf_path,
         bin_path: Some(bin_path),
         hex_path: Some(hex_path),
@@ -334,7 +332,6 @@ mod tests {
     #[test]
     fn test_build_result_pct() {
         let result = BuildResult {
-            success: true,
             elf_path: PathBuf::new(),
             bin_path: None,
             hex_path: None,

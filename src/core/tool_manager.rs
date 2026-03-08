@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use crate::core::cmake_provider::{self, CmakeProvider};
 use crate::core::clang_provider::{self, ClangProvider, ClangTool};
 use crate::core::tool_provider::{self, ArchiveType, InstallResult, ToolProvider};
-use crate::utils::{download, paths};
+use crate::utils::paths;
 
 /// Install CMake
 pub fn install_cmake(version_spec: &str, force: bool) -> Result<InstallResult> {
@@ -148,6 +148,7 @@ pub struct ToolInfo {
     pub name: String,
     pub version: String,
     pub installed_version: String,
+    #[allow(dead_code)]
     pub path: PathBuf,
     pub size_mb: u64,
 }

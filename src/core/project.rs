@@ -196,6 +196,7 @@ pub fn load(path: &Path) -> Result<ProjectConfig> {
 }
 
 /// Save project config to embtool.toml
+#[allow(dead_code)]
 pub fn save(path: &Path, config: &ProjectConfig) -> Result<()> {
     let content = toml::to_string_pretty(config).context("Failed to serialize project config")?;
     std::fs::write(path, content)

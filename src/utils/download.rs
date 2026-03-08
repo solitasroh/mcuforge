@@ -104,12 +104,14 @@ pub fn verify_sha256(path: &Path, expected: &str) -> Result<bool> {
 }
 
 /// Get cache directory size in MB
+#[allow(dead_code)]
 pub fn cache_size_mb() -> Result<u64> {
     let cache = crate::utils::paths::cache_dir()?;
-    Ok(dir_size(&cache) / (1024 * 1024))
+    Ok(crate::utils::fs::dir_size_mb(&cache))
 }
 
 /// Clear download cache
+#[allow(dead_code)]
 pub fn clear_cache() -> Result<()> {
     let cache = crate::utils::paths::cache_dir()?;
     if cache.exists() {
@@ -117,19 +119,4 @@ pub fn clear_cache() -> Result<()> {
         std::fs::create_dir_all(&cache)?;
     }
     Ok(())
-}
-
-fn dir_size(path: &Path) -> u64 {
-    let mut total = 0u64;
-    if let Ok(entries) = std::fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let p = entry.path();
-            if p.is_dir() {
-                total += dir_size(&p);
-            } else if let Ok(meta) = p.metadata() {
-                total += meta.len();
-            }
-        }
-    }
-    total
 }

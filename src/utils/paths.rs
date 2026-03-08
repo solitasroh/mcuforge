@@ -48,6 +48,7 @@ pub fn toolchain_path(vendor: &str, version: &str) -> Result<PathBuf> {
 }
 
 /// 특정 벤더-버전 툴체인의 bin/ 경로
+#[allow(dead_code)]
 pub fn toolchain_bin_path(vendor: &str, version: &str) -> Result<PathBuf> {
     Ok(toolchain_path(vendor, version)?.join("bin"))
 }

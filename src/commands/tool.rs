@@ -1,7 +1,7 @@
 use anyhow::Result;
 use iocraft::prelude::*;
 
-use crate::core::{clang_provider::ClangTool, tool_manager, tool_provider};
+use crate::core::{clang_provider::ClangTool, tool_manager};
 use crate::ui::{self, Entry, Header, Section, SectionVariant, StatusLine, StatusVariant, ToolchainRow};
 
 pub fn install(tool_name: &str, version: Option<&str>, force: bool) -> Result<()> {

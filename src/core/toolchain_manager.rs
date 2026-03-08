@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 
 use crate::core::{config, toolchain_registry};
 use crate::utils::{archive, download, paths};
@@ -174,20 +174,5 @@ fn parse_toolchain_name(name: &str) -> (String, String) {
 }
 
 fn dir_size_mb(path: &std::path::Path) -> u64 {
-    dir_size(path) / (1024 * 1024)
-}
-
-fn dir_size(path: &std::path::Path) -> u64 {
-    let mut total = 0u64;
-    if let Ok(entries) = std::fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let p = entry.path();
-            if p.is_dir() {
-                total += dir_size(&p);
-            } else if let Ok(meta) = p.metadata() {
-                total += meta.len();
-            }
-        }
-    }
-    total
+    crate::utils::fs::dir_size_mb(path)
 }

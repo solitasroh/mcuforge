@@ -69,6 +69,7 @@ impl ClangProvider {
     }
 
     /// Get release tag — static binaries repo uses a rolling tag
+    #[allow(dead_code)]
     fn release_tag() -> Result<String> {
         // The repo uses "master-{hash}" tags. We use the "latest" redirect.
         Ok("latest".to_string())

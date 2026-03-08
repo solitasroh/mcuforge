@@ -271,18 +271,7 @@ pub fn remove(spec: &str) -> Result<()> {
 }
 
 fn dir_size_mb(path: &std::path::Path) -> u64 {
-    fn walk(path: &std::path::Path) -> u64 {
-        let mut total = 0u64;
-        if let Ok(entries) = std::fs::read_dir(path) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if p.is_dir() { total += walk(&p); }
-                else if let Ok(m) = p.metadata() { total += m.len(); }
-            }
-        }
-        total
-    }
-    walk(path) / (1024 * 1024)
+    crate::utils::fs::dir_size_mb(path)
 }
 
 #[cfg(test)]
