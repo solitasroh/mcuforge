@@ -49,7 +49,7 @@ impl CmakeProvider {
             }
         }
 
-        bail!("CMake version '{}' not found. Use 'embtool cmake list --available' to see options.", spec);
+        bail!("CMake version '{}' not found. Use 'mcuforge cmake list --available' to see options.", spec);
     }
 
     fn platform_filename(version: &str) -> Result<String> {

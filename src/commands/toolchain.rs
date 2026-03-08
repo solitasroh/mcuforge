@@ -22,7 +22,7 @@ pub fn install(spec: &str, force: bool) -> Result<()> {
 
     ui::render(element! {
         Header(
-            title: "embtool toolchain install".to_string(),
+            title: "mcuforge toolchain install".to_string(),
         )
     });
 
@@ -70,7 +70,7 @@ pub fn install(spec: &str, force: bool) -> Result<()> {
 pub fn list(available: bool) -> Result<()> {
     ui::render(element! {
         Header(
-            title: "embtool toolchain list".to_string(),
+            title: "mcuforge toolchain list".to_string(),
         )
     });
 
@@ -222,7 +222,7 @@ fn resolve_installed(vendor: &str, version: &str) -> Result<(String, std::path::
     }
 
     bail!(
-        "Toolchain {}:{} is not installed. Run 'embtool toolchain list' to see installed versions.",
+        "Toolchain {}:{} is not installed. Run 'mcuforge toolchain list' to see installed versions.",
         vendor, version
     );
 }

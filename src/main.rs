@@ -7,8 +7,8 @@ mod utils;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "embtool")]
-#[command(about = "Embedded toolchain manager for NXP and STM32 MCUs")]
+#[command(name = "mcuforge")]
+#[command(about = "Cortex-M MCU development toolkit — ARM GCC, CMake, and build system manager")]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -34,7 +34,7 @@ enum Commands {
         action: ToolchainAction,
     },
 
-    /// Initialize embtool in current directory (interactive)
+    /// Initialize mcuforge in current directory (interactive)
     Init,
 
     /// Create a new embedded project
@@ -235,7 +235,7 @@ fn main() {
                     ui::render(element! {
                         View(flex_direction: FlexDirection::Column) {
                             ui::Header(
-                                title: "embtool config".to_string(),
+                                title: "mcuforge config".to_string(),
                             )
                             ui::Section(title: "Toolchain".to_string()) {
                                 ui::Entry(

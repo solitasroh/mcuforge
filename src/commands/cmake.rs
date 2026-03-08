@@ -8,7 +8,7 @@ pub fn install(version: Option<&str>, force: bool) -> Result<()> {
     let spec = version.unwrap_or(crate::core::cmake_provider::DEFAULT_CMAKE_VERSION);
 
     ui::render(element! {
-        Header(title: "embtool cmake install".to_string())
+        Header(title: "mcuforge cmake install".to_string())
     });
 
     let resolved = CmakeProvider::resolve_version(spec)?;
@@ -46,7 +46,7 @@ pub fn install(version: Option<&str>, force: bool) -> Result<()> {
 
 pub fn list(available: bool) -> Result<()> {
     ui::render(element! {
-        Header(title: "embtool cmake list".to_string())
+        Header(title: "mcuforge cmake list".to_string())
     });
 
     let installed = crate::core::cmake_provider::list_installed()?;

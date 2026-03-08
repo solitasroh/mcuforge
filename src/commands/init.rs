@@ -9,12 +9,12 @@ pub fn run() -> Result<()> {
     let cwd = std::env::current_dir()?;
 
     if cwd.join("embtool.toml").exists() {
-        bail!("embtool.toml already exists. Use 'embtool setup' to update.");
+        bail!("embtool.toml already exists. Use 'mcuforge setup' to update.");
     }
 
     ui::render(element! {
         Header(
-            title: "embtool init".to_string(),
+            title: "mcuforge init".to_string(),
             subtitle: Some(cwd.display().to_string()),
         )
     });
@@ -225,8 +225,8 @@ version = "{v}"
     });
     ui::render(element! {
         View(flex_direction: FlexDirection::Column, margin_left: 3) {
-            Text(content: "embtool setup".to_string(), color: Some(Color::Cyan))
-            Text(content: "embtool build".to_string(), color: Some(Color::Cyan))
+            Text(content: "mcuforge setup".to_string(), color: Some(Color::Cyan))
+            Text(content: "mcuforge build".to_string(), color: Some(Color::Cyan))
         }
     });
 

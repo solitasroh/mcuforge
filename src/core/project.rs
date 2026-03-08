@@ -186,7 +186,7 @@ pub fn find_project_from(start: &Path) -> Result<PathBuf> {
         }
         if !dir.pop() {
             bail!(
-                "embtool.toml not found. Run 'embtool new <name> --mcu <mcu>' to create a project."
+                "embtool.toml not found. Run 'mcuforge new <name> --mcu <mcu>' to create a project."
             );
         }
     }

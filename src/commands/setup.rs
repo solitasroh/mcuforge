@@ -7,7 +7,7 @@ use crate::utils::paths;
 
 pub fn run(ci: bool, force: bool) -> Result<()> {
     // 1. Ensure ~/.embtool directories exist
-    paths::ensure_dirs().context("Failed to create embtool directories")?;
+    paths::ensure_dirs().context("Failed to create mcuforge directories")?;
 
     // 2. Find and load embtool.toml
     let project_path = project::find_project()?;
@@ -22,7 +22,7 @@ pub fn run(ci: bool, force: bool) -> Result<()> {
     ui::render(element! {
         View(flex_direction: FlexDirection::Column) {
             Header(
-                title: "embtool setup".to_string(),
+                title: "mcuforge setup".to_string(),
                 subtitle: Some(project_dir.display().to_string()),
             )
             Section(title: "Project".to_string()) {
@@ -85,7 +85,7 @@ pub fn run(ci: bool, force: bool) -> Result<()> {
             Section(title: "Ready".to_string(), variant: SectionVariant::Success) {
                 StatusLine(
                     icon: "✓".to_string(),
-                    message: "All tools installed. Run 'embtool build' to build.".to_string(),
+                    message: "All tools installed. Run 'mcuforge build' to build.".to_string(),
                     variant: StatusVariant::Success,
                 )
             }
