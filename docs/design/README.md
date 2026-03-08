@@ -12,7 +12,7 @@
 | 파일 | 내용 |
 |------|------|
 | [phase0-infra.md](phase0-infra.md) | Phase 0: 기반 인프라 (경로, 설정, setup) |
-| [phase1-toolchain.md](phase1-toolchain.md) | Phase 1: 툴체인 관리 (install/list/use/remove) |
+| [phase1-toolchain.md](phase1-toolchain.md) | Phase 1: 툴체인 관리 (R2 레지스트리, 멀티벤더, NAS 미러) |
 | [phase2-project.md](phase2-project.md) | Phase 2: 프로젝트 생성 (MCU DB, 템플릿) |
 | [phase3-build.md](phase3-build.md) | Phase 3: 빌드 & 플래시 (CMake, PEMicro) |
 | [phase4-migrate.md](phase4-migrate.md) | Phase 4: 레거시 마이그레이션 |

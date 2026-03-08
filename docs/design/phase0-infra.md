@@ -36,11 +36,13 @@ pub fn ensure_dirs() -> Result<()>
 ```
 ~/.embtool/
 ├── config.toml           # 전역 설정
-├── toolchains/           # 설치된 ARM GCC
-│   ├── 13.3.rel1/
-│   └── 12.2.rel1/
+├── toolchains/           # 설치된 ARM GCC (벤더-버전 형식)
+│   ├── nxp-14.2.1/
+│   ├── nxp-13.2.1/
+│   └── stm-13.3.1/
 └── cache/                # 다운로드 캐시
-    └── *.tar.xz / *.zip
+    ├── versions.json
+    └── *.7z
 ```
 
 ### 의존성
@@ -66,6 +68,8 @@ pub struct GlobalConfig {
     #[serde(default)]
     pub toolchain: ToolchainConfig,
     #[serde(default)]
+    pub registry: RegistryConfig,
+    #[serde(default)]
     pub mirror: MirrorConfig,
     #[serde(default)]
     pub debug: DebugConfig,
@@ -75,15 +79,22 @@ pub struct GlobalConfig {
 
 #[derive(Serialize, Deserialize)]
 pub struct ToolchainConfig {
-    pub default: Option<String>,       // "13.3.rel1"
+    pub default: Option<String>,       // "nxp-14.2.1"
     pub install_dir: Option<String>,   // 오버라이드 시에만 사용
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RegistryConfig {
+    pub url: String,                   // "https://pub-25d9755030a54c3280b7a9f68e9bf67c.r2.dev"
+    pub cache_ttl_hours: u32,          // 24 (versions.json 캐시 유효기간)
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct MirrorConfig {
     pub enabled: bool,                 // false (기본)
-    pub url: String,                   // ""
-    pub fallback: bool,               // true
+    pub url: String,                   // "" (NAS 경로 또는 HTTP URL)
+    pub mirror_type: String,           // "local" | "http"
+    pub fallback: bool,               // true (미러 실패 시 R2로)
 }
 
 #[derive(Serialize, Deserialize)]
