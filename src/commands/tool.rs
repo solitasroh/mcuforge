@@ -9,7 +9,7 @@ pub fn install(tool_name: &str, version: Option<&str>, force: bool) -> Result<()
     let ver = version.unwrap_or("18");
 
     ui::render(element! {
-        Header(title: format!("embtool tool install {}", tool_name))
+        Header(title: format!("mcuforge tool install {}", tool_name))
     });
 
     ui::render(element! {
@@ -46,7 +46,7 @@ pub fn install(tool_name: &str, version: Option<&str>, force: bool) -> Result<()
 
 pub fn list(tool_name: Option<&str>) -> Result<()> {
     ui::render(element! {
-        Header(title: "embtool tool list".to_string())
+        Header(title: "mcuforge tool list".to_string())
     });
 
     let all_tools = tool_manager::list_all_tools()?;

@@ -127,7 +127,7 @@ pub fn find_toolchain<'a>(
     }
 
     bail!(
-        "Toolchain {}:{} not found. Run 'embtool toolchain list --available' to see options.",
+        "Toolchain {}:{} not found. Run 'mcuforge toolchain list --available' to see options.",
         vendor, version
     );
 }

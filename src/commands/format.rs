@@ -32,7 +32,7 @@ pub fn run(check: bool) -> Result<()> {
     let mode = if check { "Checking" } else { "Formatting" };
     ui::render(element! {
         View(flex_direction: FlexDirection::Column) {
-            Header(title: format!("embtool format{}", if check { " --check" } else { "" }))
+            Header(title: format!("mcuforge format{}", if check { " --check" } else { "" }))
             StatusLine(
                 icon: "⚙".to_string(),
                 message: format!("{} {} files...", mode, sources.len()),
@@ -112,7 +112,7 @@ fn find_clang_format(proj: &project::ProjectConfig) -> Result<std::path::PathBuf
         }
     }
 
-    bail!("clang-format not found. Run 'embtool tool install clang-format <version>' or 'embtool setup'.")
+    bail!("clang-format not found. Run 'mcuforge tool install clang-format <version>' or 'mcuforge setup'.")
 }
 
 fn find_sources(project_dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>> {

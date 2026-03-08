@@ -1,8 +1,8 @@
 [package]
-name = "embtool"
-version = "0.1.0"
+name = "mcuforge"
+version = "0.2.0"
 edition = "2024"
-description = "Embedded toolchain manager for NXP and STM32 MCUs"
+description = "Cortex-M MCU development toolkit — ARM GCC, CMake, and build system manager for NXP and STM32"
 authors = ["노수장 <rsj0811@rootech.com>"]
 license = "MIT"
 

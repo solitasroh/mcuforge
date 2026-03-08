@@ -21,7 +21,7 @@ pub fn run(fix: bool) -> Result<()> {
     let cc_root = project_dir.join("compile_commands.json");
 
     if !cc_path.exists() && !cc_root.exists() {
-        bail!("compile_commands.json not found. Run 'embtool build' first.");
+        bail!("compile_commands.json not found. Run 'mcuforge build' first.");
     }
 
     let compile_db = if cc_root.exists() {
@@ -140,7 +140,7 @@ fn find_clang_tidy(proj: &project::ProjectConfig) -> Result<std::path::PathBuf> 
         }
     }
 
-    bail!("clang-tidy not found. Run 'embtool tool install clang-tidy <version>' or 'embtool setup'.")
+    bail!("clang-tidy not found. Run 'mcuforge tool install clang-tidy <version>' or 'mcuforge setup'.")
 }
 
 fn find_c_sources(project_dir: &Path) -> Result<Vec<std::path::PathBuf>> {

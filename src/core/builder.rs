@@ -86,7 +86,7 @@ pub fn build(
     // CMake configure
     let toolchain_file = project_dir.join("arm-toolchain.cmake");
     if !toolchain_file.exists() {
-        bail!("arm-toolchain.cmake not found. Run 'embtool setup' first.");
+        bail!("arm-toolchain.cmake not found. Run 'mcuforge setup' first.");
     }
 
     let mut configure = Command::new(&cmake_bin);
@@ -198,7 +198,7 @@ fn find_cmake(version_spec: &str) -> Result<PathBuf> {
         }
     }
 
-    bail!("CMake {} not found. Run 'embtool setup' or 'embtool cmake install {}'.", version_spec, version_spec)
+    bail!("CMake {} not found. Run 'mcuforge setup' or 'mcuforge cmake install {}'.", version_spec, version_spec)
 }
 
 /// Run arm-none-eabi-size and parse output

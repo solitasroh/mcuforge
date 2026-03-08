@@ -48,7 +48,7 @@ pub fn run(name: &str, mcu_id: &str, project_type: &str, toolchain: Option<&str>
     ui::render(element! {
         View(flex_direction: FlexDirection::Column) {
             Header(
-                title: "embtool new".to_string(),
+                title: "mcuforge new".to_string(),
             )
             Section(title: format!("{}", name)) {
                 Entry(label: "MCU".to_string(), value: format!(
@@ -101,8 +101,8 @@ pub fn run(name: &str, mcu_id: &str, project_type: &str, toolchain: Option<&str>
     ui::render(element! {
         View(flex_direction: FlexDirection::Column, margin_left: 3) {
             Text(content: format!("cd {}", name), color: Some(Color::Cyan))
-            Text(content: "embtool setup".to_string(), color: Some(Color::Cyan))
-            Text(content: "embtool build".to_string(), color: Some(Color::Cyan))
+            Text(content: "mcuforge setup".to_string(), color: Some(Color::Cyan))
+            Text(content: "mcuforge build".to_string(), color: Some(Color::Cyan))
         }
     });
 
