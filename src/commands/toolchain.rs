@@ -182,25 +182,52 @@ pub fn list(available: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn use_version(spec: &str) -> Result<()> {
-    let (vendor, version) = parse_spec(spec)?;
-    let tc_path = paths::toolchain_path(&vendor, &version)?;
-
-    if !tc_path.exists() {
-        bail!(
-            "Toolchain {}-{} is not installed. Run 'embtool toolchain install {}' first.",
-            vendor, version, spec
-        );
+/// Resolve a spec like "nxp:14.2" to an actual installed toolchain.
+/// Tries exact match first, then prefix match (e.g., "14.2" → "nxp-14.2.1").
+fn resolve_installed(vendor: &str, version: &str) -> Result<(String, std::path::PathBuf)> {
+    // Exact match
+    let exact = paths::toolchain_path(vendor, version)?;
+    if exact.exists() {
+        return Ok((format!("{}-{}", vendor, version), exact));
     }
 
+    // Prefix match: scan installed toolchains
+    let tc_dir = paths::toolchains_dir()?;
+    if tc_dir.exists() {
+        let prefix = format!("{}-{}", vendor, version);
+        let mut matches: Vec<_> = std::fs::read_dir(&tc_dir)?
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                name.starts_with(&prefix) && e.path().is_dir()
+            })
+            .collect();
+        matches.sort_by_key(|e| e.file_name());
+
+        if let Some(entry) = matches.last() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            return Ok((name, entry.path()));
+        }
+    }
+
+    bail!(
+        "Toolchain {}:{} is not installed. Run 'embtool toolchain list' to see installed versions.",
+        vendor, version
+    );
+}
+
+pub fn use_version(spec: &str) -> Result<()> {
+    let (vendor, version) = parse_spec(spec)?;
+    let (name, _path) = resolve_installed(&vendor, &version)?;
+
     let mut cfg = config::load()?;
-    cfg.toolchain.default = Some(format!("{}-{}", vendor, version));
+    cfg.toolchain.default = Some(name.clone());
     config::save(&cfg)?;
 
     ui::render(element! {
         StatusLine(
             icon: "✓".to_string(),
-            message: format!("Switched to {} ARM GCC {}", vendor.to_uppercase(), version),
+            message: format!("Switched to {}", name),
             variant: StatusVariant::Success,
         )
     });
@@ -210,18 +237,13 @@ pub fn use_version(spec: &str) -> Result<()> {
 
 pub fn remove(spec: &str) -> Result<()> {
     let (vendor, version) = parse_spec(spec)?;
-    let tc_path = paths::toolchain_path(&vendor, &version)?;
-
-    if !tc_path.exists() {
-        bail!("Toolchain {}-{} is not installed.", vendor, version);
-    }
+    let (name, tc_path) = resolve_installed(&vendor, &version)?;
 
     let size = dir_size_mb(&tc_path);
     std::fs::remove_dir_all(&tc_path)?;
 
     let mut cfg = config::load()?;
-    let id = format!("{}-{}", vendor, version);
-    if cfg.toolchain.default.as_deref() == Some(&id) {
+    if cfg.toolchain.default.as_deref() == Some(&name) {
         cfg.toolchain.default = None;
         config::save(&cfg)?;
     }
@@ -229,7 +251,7 @@ pub fn remove(spec: &str) -> Result<()> {
     ui::render(element! {
         StatusLine(
             icon: "✓".to_string(),
-            message: format!("Removed {} ARM GCC {} (freed {} MB)", vendor.to_uppercase(), version, size),
+            message: format!("Removed {} (freed {} MB)", name, size),
             variant: StatusVariant::Success,
         )
     });
