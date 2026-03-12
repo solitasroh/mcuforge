@@ -4,7 +4,7 @@ use iocraft::prelude::*;
 use crate::core::{config, mcu_db, template};
 use crate::ui::{self, Entry, Header, Section, SectionVariant, StatusLine, StatusVariant};
 
-pub fn run(name: &str, mcu_id: &str, project_type: &str, toolchain: Option<&str>) -> Result<()> {
+pub fn run(name: &str, mcu_id: &str, project_type: &str, toolchain: Option<&str>, claude: bool) -> Result<()> {
     // 1. Lookup MCU
     let mcu = match mcu_db::lookup(mcu_id) {
         Some(m) => m,
@@ -89,6 +89,43 @@ pub fn run(name: &str, mcu_id: &str, project_type: &str, toolchain: Option<&str>
             }))
         }
     });
+
+    // 8. Install Claude skills if requested
+    if claude {
+        use crate::core::claude as claude_core;
+
+        // Append [claude] section to embtool.toml
+        let embtool_path = output_dir.join("embtool.toml");
+        if embtool_path.exists() {
+            let mut content = std::fs::read_to_string(&embtool_path)?;
+            content.push_str(&claude_core::generate_claude_toml_section(None, None, None, None));
+            std::fs::write(&embtool_path, content)?;
+        }
+
+        println!();
+        match claude_core::download_skills_package(None) {
+            Ok(cache_dir) => {
+                let config = crate::core::project::load(&embtool_path)?;
+                let report = claude_core::install_skills(&output_dir, &config, &cache_dir, true)?;
+                ui::render(element! {
+                    StatusLine(
+                        icon: "✓".to_string(),
+                        message: format!("{} Claude skills installed", report.total()),
+                        variant: StatusVariant::Success,
+                    )
+                });
+            }
+            Err(e) => {
+                ui::render(element! {
+                    StatusLine(
+                        icon: "!".to_string(),
+                        message: format!("Claude skills: {}", e),
+                        variant: StatusVariant::Warning,
+                    )
+                });
+            }
+        }
+    }
 
     println!();
     ui::render(element! {

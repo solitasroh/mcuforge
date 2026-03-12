@@ -1,0 +1,44 @@
+---
+name: mcu-debug-guide
+description: "Guides debugging of common firmware issues: HardFault analysis, measurement accuracy problems, communication failures, and interrupt-related bugs on {{mcu}}. Use when encountering runtime errors or unexpected behavior. Do NOT use for code style issues (use verify skills instead)."
+argument-hint: "[hardfault|measurement|comm|interrupt]"
+user-invokable: true
+agent: embedded-debugger
+---
+
+# MCU Debug Guide
+
+Guide debugging of common firmware issues on {{mcu}} {{core}}.
+
+## Scenarios
+
+### HardFault
+1. Get PC (Program Counter) and LR (Link Register) values
+2. Check CFSR (Configurable Fault Status Register)
+3. Determine fault type: BusFault (precise/imprecise), UsageFault, MemManage
+4. Common causes:
+   - Stack overflow (SP below stack limit)
+   - Unaligned access (LDM/STM/LDRD/STRD)
+   - Invalid instruction (PC in non-executable memory)
+   - Null pointer dereference
+
+### Measurement Accuracy
+1. Check ADC calibration status
+2. Verify DMA buffer integrity (alignment, overflow)
+3. Trace data flow: ADC → average → calibration → resistance
+4. Check calibration table values
+5. Verify temperature compensation parameters
+
+### Communication Failure
+1. Check UART clock and baud rate configuration
+2. Verify pin mux (TX/RX pins)
+3. Check for buffer overflow in ring buffer
+4. Verify interrupt priority (UART vs other ISRs)
+5. Check for framing/parity errors
+
+### Interrupt Issues
+1. Verify interrupt is enabled in NVIC
+2. Check interrupt priority conflicts
+3. Verify ISR handler is registered in vector table
+4. Check for missing interrupt flag clear
+5. Verify shared variable protection (volatile, critical section)

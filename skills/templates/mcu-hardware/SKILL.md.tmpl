@@ -1,0 +1,62 @@
+---
+name: mcu-hardware
+description: "Provides {{mcu}} peripheral register reference: ADC, DMA, UART, SPI, GPIO, Timer base addresses and field definitions. Use when configuring peripherals, debugging register values, or writing driver code. Do NOT use for application-level data processing logic."
+disable-model-invocation: true
+---
+
+# MCU Hardware & Registers
+
+## Overview
+
+Based on the `{{mcu}}.svd` file, this skill provides information about the peripheral registers and their fields.
+
+## Key Peripherals
+
+| Peripheral | Base Address | Description |
+|---|---|---|
+| SIM | `0x4004_7000` | System Integration Module (Clock gating, pin mux) |
+| PORTA-E | `0x4004_9000`... | Pin Control Register (PCR) |
+| GPIOA-E | `0x400F_F000`... | Digital I/O (PDOR, PDIR, PDDR) |
+| ADC0/1 | `0x4003_B000`... | Analog-to-Digital Converter (16-bit SAR) |
+| FTM0/1/2 | `0x4003_8000`... | FlexTimer (PWM, Input Capture) |
+| UART0-3 | `0x4006_A000`... | Universal Asynchronous Receiver/Transmitter |
+| SPI0/1 | `0x4002_C000`... | Serial Peripheral Interface |
+| I2C0/1 | `0x4006_6000`... | Inter-Integrated Circuit |
+| PIT | `0x4003_7000` | Periodic Interrupt Timer |
+
+## Register Access Pattern
+
+Use the CMSIS-provided structures (e.g., `ADC_Type`, `SIM_Type`) via base pointers:
+
+```c
+// Enable clock for ADC0
+SIM->SCGC6 |= SIM_SCGC6_ADC0_MASK;
+
+// Configure ADC0 CFG1 register
+ADC0->CFG1 = ADC_CFG1_ADIV(0) | ADC_CFG1_MODE(1) | ADC_CFG1_ADICLK(0);
+```
+
+## Pin Muxing (PORT)
+
+Configure pin function in `PORTx_PCRn`:
+
+```c
+// Enable clock for PORTB
+SIM->SCGC5 |= SIM_SCGC5_PORTB_MASK;
+
+// Set PTB0 as GPIO (MUX=1)
+PORTB->PCR[0] = PORT_PCR_MUX(1);
+```
+
+## GPIO Control
+
+- **Set Output**: `GPIOx->PDOR |= (1 << PIN)` or `GPIOx->PSOR = (1 << PIN)` (Atomic Set)
+- **Clear Output**: `GPIOx->PDOR &= ~(1 << PIN)` or `GPIOx->PCOR = (1 << PIN)` (Atomic Clear)
+- **Toggle Output**: `GPIOx->PTOR = (1 << PIN)` (Atomic Toggle)
+- **Read Input**: `(GPIOx->PDIR >> PIN) & 1`
+- **Direction**: `GPIOx->PDDR |= (1 << PIN)` (Output), `&= ~(1 << PIN)` (Input)
+
+## References
+
+- `{{mcu}}.svd`: System View Description file (Registers/Fields)
+- `CMSIS/{{mcu}}.h`: C header definitions

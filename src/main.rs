@@ -50,6 +50,15 @@ enum Commands {
         /// Toolchain spec (e.g., nxp:14.2). Defaults to config default
         #[arg(long)]
         toolchain: Option<String>,
+        /// Include Claude Code skills
+        #[arg(long)]
+        claude: bool,
+    },
+
+    /// Manage Claude Code skills
+    Claude {
+        #[command(subcommand)]
+        action: commands::claude::ClaudeAction,
     },
 
     /// Manage CMake versions
@@ -215,9 +224,11 @@ fn main() {
 
         Commands::Init => commands::init::run(),
 
-        Commands::New { name, mcu, r#type, toolchain } => {
-            commands::new::run(&name, &mcu, &r#type, toolchain.as_deref())
+        Commands::New { name, mcu, r#type, toolchain, claude } => {
+            commands::new::run(&name, &mcu, &r#type, toolchain.as_deref(), claude)
         }
+
+        Commands::Claude { action } => commands::claude::run(action),
 
         Commands::Build { profile, release, clean, verbose } => {
             let actual_profile = if release { "release" } else { &profile };

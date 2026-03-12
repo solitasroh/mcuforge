@@ -1,0 +1,56 @@
+---
+name: mcu-peripheral-checklist
+description: "Validates peripheral initialization completeness: clock gating, pin muxing, interrupt setup, and DMA configuration for {{mcu}}. Use when adding or modifying peripheral drivers in Drivers/. Do NOT use for application-level logic in Sources/."
+argument-hint: "[peripheral name, e.g., adc, uart]"
+user-invokable: true
+---
+
+# MCU Peripheral Checklist
+
+Validate that peripheral initialization covers all required steps.
+
+## Universal Checklist (all peripherals)
+
+1. [ ] Clock gating enabled (`SIM->SCGCx`)
+2. [ ] Pin mux configured (`PORT->PCR[n]`)
+3. [ ] Peripheral configured while disabled
+4. [ ] Peripheral enabled after full configuration
+
+## Per-Peripheral Checklists
+
+### ADC
+1. [ ] `SIM->SCGC6 |= SIM_SCGC6_ADC0_MASK`
+2. [ ] CFG1: resolution (MODE), clock (ADICLK), divider (ADIV)
+3. [ ] CFG2: MUX select (MUXSEL), sample time (ADLSTS)
+4. [ ] SC2: trigger (ADTRG), DMA (DMAEN)
+5. [ ] SC3: hardware average (AVGE/AVGS), calibration (CAL)
+6. [ ] Calibration executed and completed
+7. [ ] Analog input pins: PORT_PCR_MUX(0)
+8. [ ] [DMA] DMA channel configured, SC2[DMAEN]=1
+9. [ ] [IRQ] SC1n[AIEN]=1, NVIC EnableIRQ(ADC0_IRQn)
+
+### UART
+1. [ ] `SIM->SCGC4 |= SIM_SCGC4_UARTx_MASK`
+2. [ ] TX/RX pins: PORT_PCR_MUX(3)
+3. [ ] Baud rate: BDH/BDL registers
+4. [ ] C2: TE, RE (transmit/receive enable)
+5. [ ] [IRQ] C2[RIE]=1, NVIC EnableIRQ
+
+### GPIO
+1. [ ] `SIM->SCGC5 |= SIM_SCGC5_PORTx_MASK`
+2. [ ] PORT_PCR_MUX(1) for GPIO function
+3. [ ] PDDR: direction (input/output)
+4. [ ] [IRQ] PORT_PCR_IRQC for edge detect
+
+### FTM (Timer)
+1. [ ] `SIM->SCGC6 |= SIM_SCGC6_FTMx_MASK`
+2. [ ] SC: clock source (CLKS), prescaler (PS)
+3. [ ] MOD: period
+4. [ ] CnSC + CnV: channel mode and value
+5. [ ] [IRQ] SC[TOIE]=1 or CnSC[CHIE]=1
+
+## Workflow
+
+1. Read the target driver file in Drivers/
+2. Cross-reference with the checklist above
+3. Report missing or incorrect initialization steps

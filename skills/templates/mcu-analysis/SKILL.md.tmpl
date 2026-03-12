@@ -1,0 +1,105 @@
+---
+name: mcu-analysis
+description: "Analyzes firmware binary size, linker map sections, symbol placement, and static stack usage to detect memory issues and overflow risks. Use after build for memory optimization or before release. Do NOT use without a valid ELF/map file."
+argument-hint: "<size|map|stack> [--top=N] [--section=<name>] [--threshold=N] [--call-graph] [--unused]"
+user-invokable: true
+agent: memory-analyzer
+---
+
+# MCU Analysis (Size + Map + Stack)
+
+Unified analysis skill combining binary size, linker map, and stack analysis.
+
+## Sub-commands
+
+### `size` — Binary Size Analysis
+
+1. **Locate ELF file**: Find `output/*.elf`. If not found, suggest running `/mcu-build` first.
+
+2. **Section-level analysis**: Run `arm-none-eabi-size -A` on the ELF to show all sections with sizes.
+
+3. **Parse linker script**: Read the linker script (from CLAUDE.md) and extract the `MEMORY` block to determine:
+   - Flash region: `m_text` ORIGIN and LENGTH
+   - RAM region: `m_data` ORIGIN and LENGTH
+   - Memory pool: `m_memorypool` ORIGIN and LENGTH (if present)
+
+4. **Calculate usage**:
+   - **Flash usage**: Sum of `.interrupts` + `.text` + `.rodata` + `.data` (LMA) sections vs Flash available
+   - **RAM usage**: Sum of `.data` + `.bss` sections vs RAM available
+   - Display as percentage bars: `[████████░░] 82% (368KB / 448KB)`
+
+5. **Top symbols by size**: Run `arm-none-eabi-nm --size-sort --reverse-sort -S` on the ELF.
+
+6. **Summary table**:
+
+   ```
+   Memory Region    Used       Total      Usage
+   ─────────────────────────────────────────────
+   Flash (m_text)   368.2 KB   448.0 KB   82.2%
+   RAM (m_data)      12.4 KB    63.8 KB   19.4%
+   Mempool           64.0 KB    64.0 KB   100%
+   ```
+
+### `map` — Linker Map Analysis
+
+Arguments: `--section=<name>`, `--unused`, `--top=N`
+
+1. **Locate map file**: Glob `output/**/*.map`.
+
+2. **Section summary**: Parse map file and present summary of all output sections:
+
+   ```
+   Section        VMA          Size       %Flash/%RAM
+   ──────────────────────────────────────────────────
+   .interrupts    0x00010000      444 B    Flash
+   .text          0x00010200   186.3 KB    Flash  41.6%
+   .data          0x1FFF0100     1.2 KB    RAM    1.9%
+   .bss           0x1FFF0580     8.4 KB    RAM   13.2%
+   ```
+
+3. **Top symbols per section**: For each major section, list the largest symbols with their source file.
+
+4. **Component breakdown**: Group symbol sizes by component/source directory.
+
+5. **Unused sections** (with `--unused`): Parse "Discarded input sections".
+
+6. **Fill/padding analysis**: Identify fill or alignment padding regions.
+
+### `stack` — Static Stack Analysis
+
+Arguments: `--threshold=N`, `--call-graph`
+
+**Stack Limit**: Read from CLAUDE.md "Memory Configuration" > "Stack Size".
+
+**Strategy 1: Using `.su` files (preferred)**
+
+1. Find `.su` files: Glob `output/**/*.su`
+2. Parse each file: Extract function name and stack usage
+3. Build call graph
+4. Calculate worst-case depth for each entry point (main, ISR handlers)
+
+**Strategy 2: Manual analysis (fallback)**
+
+1. Identify ISR handlers: Search for `*_IRQHandler` functions
+2. Analyze each function for local variable sizes and call depth
+3. Estimate stack usage
+
+**Analysis Output**:
+
+1. Per-function report with individual stack usage
+2. Worst-case call chains:
+
+   ```
+   Call chain (worst case: 892 / 1536 bytes = 58%):
+     main() [32B]
+       → application_process() [64B]
+         → protocol_parse_frame() [248B]
+   ```
+
+3. Combined worst case: main stack + ISR preemption
+4. Warnings for:
+   - Functions using >256 bytes individually
+   - Call chains exceeding 75% of stack limit
+   - Combined main+ISR exceeding 90%
+   - Recursion (infinite stack growth risk)
+   - Local arrays >128 bytes
