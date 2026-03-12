@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -18,6 +19,50 @@ pub struct ProjectConfig {
     pub build: BuildConfig,
     #[serde(default)]
     pub debug: ProjectDebug,
+    #[serde(default)]
+    pub claude: Option<ClaudeConfig>,
+}
+
+// ── Claude Code Skills configuration ──
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ClaudeConfig {
+    pub version: Option<String>,
+    pub auto_update: Option<bool>,
+    #[serde(default)]
+    pub skills: ClaudeSkillsConfig,
+    pub gitlab: Option<ClaudeGitlabConfig>,
+    pub openproject: Option<ClaudeOpenProjectConfig>,
+    pub memory: Option<ClaudeMemoryConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ClaudeSkillsConfig {
+    pub universal: Option<bool>,
+    pub embedded_c: Option<bool>,
+    #[serde(flatten)]
+    pub overrides: HashMap<String, toml::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaudeGitlabConfig {
+    pub url: String,
+    pub ssh_port: Option<u16>,
+    pub target_branch: Option<String>,
+    pub project_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaudeOpenProjectConfig {
+    pub url: String,
+    pub project_id: u32,
+    pub product_codes: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaudeMemoryConfig {
+    pub stack_size: Option<String>,
+    pub app_flash_start: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -313,6 +358,7 @@ interface = "swd"
             tools: ToolsConfig::default(),
             build: BuildConfig::default(),
             debug: ProjectDebug::default(),
+            claude: None,
         };
 
         save(&path, &config).unwrap();

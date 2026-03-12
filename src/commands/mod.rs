@@ -1,4 +1,5 @@
 pub mod build;
+pub mod claude;
 pub mod cmake;
 pub mod format;
 pub mod init;

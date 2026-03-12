@@ -1,5 +1,6 @@
 pub mod builder;
 pub mod clang_provider;
+pub mod claude;
 pub mod cmake_provider;
 pub mod config;
 pub mod mcu_db;

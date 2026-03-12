@@ -1,0 +1,59 @@
+{
+  "version": "1.0.0",
+  "min_mcuforge": "0.3.0",
+  "skills": {
+    "universal": [
+      {"name": "commit", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "manage-skills", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "pdca-cycle", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "systematic-debugging", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "code-quality-audit", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "refactoring-guide", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "todo-debt-tracker", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "change-impact-analysis", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "gap-analysis", "version": "1.0.0", "files": ["SKILL.md"]}
+    ],
+    "embedded_c": [
+      {"name": "mcu-build", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "mcu-quality", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "mcu-doc", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "mcu-changelog", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "mcu-safety-review", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "mcu-module-scaffold", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "mcu-regression-guard", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "mcu-coding-rules", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "mcu-peripheral-driver", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "verify-barr-c", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "verify-type-safety", "version": "1.0.0", "files": ["SKILL.md"]},
+      {"name": "verify-implementation", "version": "1.0.0", "files": ["SKILL.md"], "depends": ["verify-barr-c", "verify-mcu-float", "verify-type-safety", "verify-driver-structure"]}
+    ],
+    "templates": [
+      {"name": "gitlab-mr", "version": "1.0.0", "requires_config": ["claude.gitlab"]},
+      {"name": "openproject", "version": "1.0.0", "requires_config": ["claude.openproject"], "files": ["SKILL.md.tmpl", "scripts/op.py", "references/*", "config.json.tmpl"]},
+      {"name": "unit-test-gen", "version": "1.0.0"},
+      {"name": "mcu-analysis", "version": "1.0.0"},
+      {"name": "mcu-review", "version": "1.0.0"},
+      {"name": "mcu-dataflow", "version": "1.0.0"},
+      {"name": "mcu-memory-budget", "version": "1.0.0"},
+      {"name": "mcu-peripheral-checklist", "version": "1.0.0"},
+      {"name": "mcu-debug-guide", "version": "1.0.0"},
+      {"name": "verify-mcu-float", "version": "1.0.0"},
+      {"name": "verify-driver-structure", "version": "1.0.0"},
+      {"name": "mcu-architecture", "version": "1.0.0"},
+      {"name": "mcu-hardware", "version": "1.0.0"}
+    ]
+  },
+  "hooks": [
+    {"name": "check-float-suffix", "version": "1.0.0", "linked_skill": "verify-mcu-float"},
+    {"name": "check-stdint-types", "version": "1.0.0", "linked_skill": "verify-type-safety"},
+    {"name": "check-driver-boundary", "version": "1.0.0", "linked_skill": "verify-driver-structure"},
+    {"name": "inject-context", "version": "1.0.0", "linked_skill": null},
+    {"name": "run-build", "version": "1.0.0", "linked_skill": "mcu-build"}
+  ],
+  "agents": [
+    {"name": "embedded-reviewer", "version": "1.0.0", "linked_skill": "mcu-review"},
+    {"name": "embedded-debugger", "version": "1.0.0", "linked_skill": "mcu-debug-guide"},
+    {"name": "module-generator", "version": "1.0.0", "linked_skill": "mcu-module-scaffold"},
+    {"name": "memory-analyzer", "version": "1.0.0", "linked_skill": "mcu-memory-budget"}
+  ]
+}
