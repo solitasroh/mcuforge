@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-skills:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify manifest version matches tag
+        run: |
+          MANIFEST_VER=$(python3 -c "import json; print(json.load(open('skills/manifest.json'))['version'])")
+          TAG_VER="${{ steps.version.outputs.version }}"
+          # Allow tag like v0.3.0 even if skills manifest is 1.0.0 (skills version != CLI version)
+          echo "Tag version: $TAG_VER, Skills manifest: $MANIFEST_VER"
+
+      - name: Pack skills archive
+        run: |
+          cd skills
+          tar -czf "../claude-skills-v${{ steps.version.outputs.version }}.tar.gz" \
+            manifest.json \
+            universal/ \
+            embedded-c/ \
+            templates/ \
+            agents/ \
+            hooks/
+
+      - name: Upload skills archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-skills
+          path: claude-skills-v*.tar.gz
+
+  build-binary:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: mcuforge.exe
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: mcuforge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcuforge-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/${{ matrix.artifact }}
+
+  release:
+    needs: [build-skills, build-binary]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          cp artifacts/claude-skills/*.tar.gz release-assets/
+          cp artifacts/mcuforge-x86_64-pc-windows-msvc/mcuforge.exe release-assets/mcuforge-windows-x86_64.exe
+          cp artifacts/mcuforge-x86_64-unknown-linux-gnu/mcuforge release-assets/mcuforge-linux-x86_64
+          chmod +x release-assets/mcuforge-linux-x86_64
+          ls -la release-assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release-assets/*

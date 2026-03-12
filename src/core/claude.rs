@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use indicatif::{ProgressBar, ProgressStyle};
 
-use crate::core::project::ProjectConfig;
+use crate::core::{config, project::ProjectConfig};
+use crate::utils::paths;
 
 /// Template rendering context for skill templates
 pub struct TemplateContext {
@@ -345,33 +348,261 @@ fn chrono_now_iso() -> String {
     format!("unix:{}", now.as_secs())
 }
 
+const GITHUB_REPO: &str = "solitasroh/mcuforge";
+const SKILLS_ASSET_PREFIX: &str = "claude-skills-v";
+
+/// Generate cache key candidates: ["0.3.0", "v0.3.0"] or ["latest"]
+fn cache_candidates(version_key: &str) -> Vec<String> {
+    if version_key == "latest" {
+        vec!["latest".into()]
+    } else if let Some(stripped) = version_key.strip_prefix('v') {
+        vec![version_key.into(), stripped.into()]
+    } else {
+        vec![version_key.into(), format!("v{}", version_key)]
+    }
+}
+
 /// Download skills package from GitHub release to cache
 pub fn download_skills_package(version: Option<&str>) -> Result<PathBuf> {
-    let cache_base = dirs::home_dir()
-        .context("Cannot find home directory")?
-        .join(".embtool")
-        .join("claude-skills");
+    let cache_base = paths::skills_cache_dir()?;
+    let version_key = version.unwrap_or("latest");
 
-    let version = version.unwrap_or("latest");
-    let cache_dir = cache_base.join(version);
-
-    if cache_dir.exists() {
-        return Ok(cache_dir);
+    // Try cache hit with both "X.Y.Z" and "vX.Y.Z" variants
+    for candidate_key in cache_candidates(version_key) {
+        let cache_dir = cache_base.join(&candidate_key);
+        if cache_dir.join("manifest.json").exists() {
+            // Check if this is a pointer dir (Windows "latest" alias)
+            let source_file = cache_dir.join(".source");
+            if source_file.exists() {
+                let real_dir = PathBuf::from(fs::read_to_string(&source_file)?.trim());
+                if real_dir.join("manifest.json").exists() {
+                    return Ok(real_dir);
+                }
+            }
+            return Ok(cache_dir);
+        }
     }
 
-    // TODO: Implement GitHub API download
-    // GET https://api.github.com/repos/solitasroh/mcuforge/releases/latest
-    // Find asset matching claude-skills-v*.tar.gz
-    // Download and extract to cache_dir
+    let cache_dir = cache_base.join(version_key);
 
-    anyhow::bail!(
-        "Skills package v{} not found in cache (~/.embtool/claude-skills/{}).\n\
-         Download from: https://github.com/solitasroh/mcuforge/releases\n\
-         Extract to: {}",
-        version,
-        version,
-        cache_dir.display()
+    // Resolve release info from GitHub API
+    let (tag, asset_url, asset_size) = resolve_release(version)?;
+    let resolved_dir = cache_base.join(&tag);
+
+    // Check if resolved version is already cached
+    if resolved_dir.join("manifest.json").exists() {
+        // Symlink "latest" → resolved tag
+        if version_key == "latest" && resolved_dir != cache_dir {
+            symlink_or_copy_dir(&resolved_dir, &cache_dir)?;
+        }
+        return Ok(resolved_dir);
+    }
+
+    // Download tar.gz to temp file
+    eprintln!("  Downloading skills package {}...", tag);
+    let tar_gz_data = download_asset(&asset_url, asset_size)?;
+
+    // Extract with flate2 + tar
+    eprintln!("  Extracting to {}...", resolved_dir.display());
+    fs::create_dir_all(&resolved_dir)?;
+    extract_tar_gz(&tar_gz_data, &resolved_dir)?;
+
+    // Verify manifest exists
+    if !resolved_dir.join("manifest.json").exists() {
+        fs::remove_dir_all(&resolved_dir).ok();
+        bail!("Invalid skills package: manifest.json not found after extraction");
+    }
+
+    // Link "latest" → resolved tag
+    if version_key == "latest" && resolved_dir != cache_dir {
+        symlink_or_copy_dir(&resolved_dir, &cache_dir)?;
+    }
+
+    Ok(resolved_dir)
+}
+
+/// Resolve GitHub release → (tag, asset_download_url, size)
+fn resolve_release(version: Option<&str>) -> Result<(String, String, u64)> {
+    let api_url = match version {
+        Some(v) if v != "latest" => format!(
+            "https://api.github.com/repos/{}/releases/tags/v{}",
+            GITHUB_REPO, v
+        ),
+        _ => format!(
+            "https://api.github.com/repos/{}/releases/latest",
+            GITHUB_REPO
+        ),
+    };
+
+    let client = reqwest::blocking::Client::new();
+    let resp = client
+        .get(&api_url)
+        .header("User-Agent", "mcuforge")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .with_context(|| format!("Failed to connect to GitHub API: {}", api_url))?;
+
+    if !resp.status().is_success() {
+        bail!(
+            "GitHub API error: HTTP {} for {}\nCheck network or release version.",
+            resp.status(),
+            api_url
+        );
+    }
+
+    let release: serde_json::Value = resp.json().context("Failed to parse GitHub API response")?;
+
+    let tag = release["tag_name"]
+        .as_str()
+        .context("Release missing tag_name")?
+        .to_string();
+
+    // Find skills asset
+    let assets = release["assets"]
+        .as_array()
+        .context("Release missing assets")?;
+
+    for asset in assets {
+        let name = asset["name"].as_str().unwrap_or("");
+        if name.starts_with(SKILLS_ASSET_PREFIX) && name.ends_with(".tar.gz") {
+            let url = asset["browser_download_url"]
+                .as_str()
+                .context("Asset missing download URL")?
+                .to_string();
+            let size = asset["size"].as_u64().unwrap_or(0);
+            return Ok((tag, url, size));
+        }
+    }
+
+    bail!(
+        "No skills asset ({}*.tar.gz) found in release {}.\n\
+         Available assets: {}",
+        SKILLS_ASSET_PREFIX,
+        tag,
+        assets
+            .iter()
+            .filter_map(|a| a["name"].as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
     )
+}
+
+/// Download asset with progress bar
+fn download_asset(url: &str, total_size: u64) -> Result<Vec<u8>> {
+    let client = reqwest::blocking::Client::new();
+    let mut resp = client
+        .get(url)
+        .header("User-Agent", "mcuforge")
+        .send()
+        .with_context(|| format!("Failed to download: {}", url))?;
+
+    if !resp.status().is_success() {
+        bail!("Download failed: HTTP {} from {}", resp.status(), url);
+    }
+
+    let actual_size = resp.content_length().unwrap_or(total_size);
+    let pb = if !config::is_ci() && actual_size > 0 {
+        let pb = ProgressBar::new(actual_size);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("   {bar:40.cyan/dim} {percent}% ({bytes}/{total_bytes})")
+                .unwrap()
+                .progress_chars("━╸─"),
+        );
+        Some(pb)
+    } else {
+        if actual_size > 0 {
+            eprintln!(
+                "   Downloading ({:.1} KB)...",
+                actual_size as f64 / 1024.0
+            );
+        }
+        None
+    };
+
+    let mut data = Vec::with_capacity(actual_size as usize);
+    let mut downloaded: u64 = 0;
+    loop {
+        let mut buf = [0u8; 8192];
+        let n = resp.read(&mut buf).context("Download interrupted")?;
+        if n == 0 {
+            break;
+        }
+        data.extend_from_slice(&buf[..n]);
+        downloaded += n as u64;
+        if let Some(ref pb) = pb {
+            pb.set_position(downloaded);
+        }
+    }
+
+    if let Some(pb) = pb {
+        pb.finish_and_clear();
+    }
+
+    Ok(data)
+}
+
+/// Extract tar.gz bytes into destination directory
+fn extract_tar_gz(data: &[u8], dest: &Path) -> Result<()> {
+    use flate2::read::GzDecoder;
+    use tar::Archive;
+
+    let decoder = GzDecoder::new(data);
+    let mut archive = Archive::new(decoder);
+
+    for entry in archive.entries().context("Failed to read tar entries")? {
+        let mut entry = entry.context("Failed to read tar entry")?;
+        let path = entry.path().context("Invalid entry path")?.into_owned();
+
+        let dest_path = dest.join(&path);
+
+        // Safety: prevent path traversal
+        if !dest_path.starts_with(dest) {
+            bail!("Path traversal detected in archive: {}", path.display());
+        }
+
+        if entry.header().entry_type().is_dir() {
+            fs::create_dir_all(&dest_path)?;
+        } else {
+            if let Some(parent) = dest_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            entry
+                .unpack(&dest_path)
+                .with_context(|| format!("Failed to extract: {}", path.display()))?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Create a symlink (Unix) or copy directory (Windows) for "latest" alias
+fn symlink_or_copy_dir(src: &Path, dest: &Path) -> Result<()> {
+    if dest.exists() {
+        fs::remove_dir_all(dest).ok();
+    }
+
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(src, dest)
+            .with_context(|| format!("Failed to symlink {} → {}", dest.display(), src.display()))?;
+    }
+
+    #[cfg(windows)]
+    {
+        // Junction requires admin on older Windows; just write a pointer file
+        fs::create_dir_all(dest)?;
+        fs::write(
+            dest.join(".source"),
+            src.to_string_lossy().as_bytes(),
+        )?;
+        // Copy manifest.json so cache hit check works
+        if src.join("manifest.json").exists() {
+            fs::copy(src.join("manifest.json"), dest.join("manifest.json"))?;
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Default)]

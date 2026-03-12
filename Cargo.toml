@@ -1,6 +1,6 @@
 [package]
 name = "mcuforge"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "Cortex-M MCU development toolkit — ARM GCC, CMake, and build system manager for NXP and STM32"
 authors = ["노수장 <rsj0811@rootech.com>"]

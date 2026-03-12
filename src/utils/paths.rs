@@ -53,6 +53,11 @@ pub fn toolchain_bin_path(vendor: &str, version: &str) -> Result<PathBuf> {
     Ok(toolchain_path(vendor, version)?.join("bin"))
 }
 
+/// ~/.embtool/claude-skills/
+pub fn skills_cache_dir() -> Result<PathBuf> {
+    Ok(embtool_home()?.join("claude-skills"))
+}
+
 /// 캐시된 versions.json 경로
 pub fn cached_versions_path() -> Result<PathBuf> {
     Ok(cache_dir()?.join("versions.json"))
