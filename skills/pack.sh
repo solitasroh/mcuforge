@@ -10,6 +10,7 @@ echo "Packing Claude skills v${VERSION}..."
 cd "$SCRIPT_DIR"
 tar -czf "../claude-skills-v${VERSION}.tar.gz" \
     manifest.json \
+    settings.json.tmpl \
     universal/ \
     embedded-c/ \
     templates/ \

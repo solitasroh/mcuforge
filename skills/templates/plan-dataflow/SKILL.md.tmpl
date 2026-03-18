@@ -1,0 +1,107 @@
+---
+name: plan-dataflow
+description: "Traces data flow through the IRM measurement pipeline: ADC gathering → moving average → calibration → resistance calculation → temperature compensation → insulation index → host communication. ALWAYS use this skill when the user mentions: 데이터 흐름, data flow, 파이프라인 추적, pipeline trace, 데이터 경로, data path, 변수 추적, variable trace, 함수 추적, function trace, 측정 파이프라인, measurement pipeline, ADC에서 저항값까지, upstream 추적, downstream 추적, 동기화 분석, synchronization analysis, 데이터 전파, data propagation, 흐름 추적, flow trace, or wants to know where data goes between pipeline stages. Use when debugging measurement accuracy or modifying pipeline files. Do NOT use for: specific bug root cause analysis (use do-debug), code quality metrics (use plan-quality-audit), communication protocol or HV control logic."
+argument-hint: "[variable or function name]"
+user-invocable: true
+---
+
+# MCU Dataflow Tracer
+
+Trace data flow through the insulation resistance measurement pipeline.
+
+## Workflow
+
+### Case A: No argument (full pipeline trace)
+
+1. Use Pipeline Stages below as anchor — read each stage's source file to verify current implementation
+2. Report any discrepancy between anchor and actual code (renamed functions, added stages, changed parameters)
+3. Output: 8-stage diagram with actual function names, timing, unit conversions, sync mechanisms
+
+### Case B: Variable name argument
+
+1. **Find writes**: Grep for `variable_name =` or `variable_name[` assignments across Sources/ and Drivers/
+2. **Find reads**: Grep for `variable_name` usage (excluding writes) to identify consumers
+3. **Identify context**: For each producer/consumer, determine execution context (ISR, task, period)
+4. **Check sync**: Look for CRITICAL_SECTION, volatile, mutex, indexed_buffer around the variable
+5. **Expand chain**: Follow upstream (what feeds the producer?) and downstream (what consumes the consumer's output?) one level each
+6. **Map to pipeline**: Locate the variable within the 8-stage pipeline
+
+### Case C: Function name argument
+
+1. **Find callers**: Grep for `function_name(` across Sources/ to identify upstream callers
+2. **Read function**: Read the function body to identify input parameters and data sources
+3. **Find outputs**: Identify return values, pointer writes, global variable modifications
+4. **Find consumers**: Grep for output variables to trace downstream impact
+5. **Map to pipeline**: Locate the function within the 8-stage pipeline
+6. **Report scope**: Show how far upstream/downstream the function's influence extends
+
+## Pipeline Stages (Anchor — verify against actual code)
+
+The stages below are reference anchors. When analyzing, ALWAYS read the actual source code
+to verify. If code has diverged from this anchor, report based on actual code.
+
+```
+[Stage 1] ADC + DMA (1kHz)
+  ADC0 channels → 16-bit, HW 32x avg, DMA transfer
+  Files: Drivers/adc.c, Drivers/dma.c
+       ↓ DMA15 ISR (1ms)
+
+[Stage 2] Moving Average (adc_gathering.c)
+  accumulate_adc_sample() → adc_ma_sum[2][32]
+  10 samples/window, 32 window ring buffer
+       ↓ get_adc_ma_history_ptr()
+
+[Stage 3] Sliding Window Average (measure.c, 200ms)
+  read_and_average_samples() → sum_sliding_window()
+  20 windows (200 samples) average
+       ↓
+
+[Stage 4] DC Calibration (calibration.c)
+  calibration_adjust_dc_voltage() → 2-point linear
+  calibration_adjust_current() → zero offset + linear
+       ↓
+
+[Stage 5] Resistance (measure.c)
+  validate_measurement() → R = V / I
+       ↓
+
+[Stage 6] Temperature Compensation (measure.c)
+  compensate_resistance_to_reference_temp()
+  k_t = exp2f(-(base-test)/slope)
+       ↓
+
+[Stage 7] Index Calculation (insulation_index.c)
+  PI: R(t1)/R(t2) × 10
+  DAR: R(t1)/R(t2) × 10
+  RI: R at ri_t (absolute)
+       ↓
+
+[Stage 8] Host Communication (module_management.c)
+  module_write(32000, measure_data)
+  Units: V, μA, MΩ
+```
+
+## Shared Variables and Synchronization
+
+| Resource | Producer | Consumer | Sync |
+|----------|----------|----------|------|
+| adc_ma_sum[2][32] | DMA15 ISR | aggregation_task | CRITICAL_SECTION |
+| ma_index, samples_in_window | DMA15 ISR | aggregation_task | volatile + CRIT_SEC |
+| measure_1s_indexed_buffer | aggregation_task | index_eval_task | indexed_buffer internal |
+| published_index etc. | index_eval_task | module_management | publish_lock mutex |
+
+## Unit Conversion Map
+
+```
+ADC counts (uint16_t) → float (sliding avg) → V/A (calibrated)
+  → Ω (R=V/I) → Ω (temp compensated) → MΩ (÷1e6) → μA (×1e6, current only)
+```
+
+## Timing
+
+| Layer | Period | Source |
+|-------|--------|--------|
+| PIT0 ISR | 1ms | adc_gathering.c:100 `pit_timer_start(adc_timer, MSEC_TICK)` |
+| DMA15 ISR | ~1ms | triggered by ADC conversion complete |
+| aggregation_task | 200ms | measure.c:27 `AGGREGATION_PERIOD_MS 200` |
+| index_eval_task | 1s | insulation_index.c:603 `wtask_schedule_successively_sec(&index_evaluation_task, 1)` |

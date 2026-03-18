@@ -1,6 +1,6 @@
 ---
 name: verify-type-safety
-description: "Checks for primitive type usage (int, short, long, unsigned char) and enforces stdint.h explicit-width types (uint8_t, int32_t, etc.). Use proactively when declaring variables, struct members, or function signatures in .c/.h files. Do NOT use for CMSIS vendor headers, System/ startup code, or main() return type."
+description: "Checks for primitive type usage (int, short, long, unsigned char) and enforces stdint.h explicit-width types (uint8_t, int32_t, etc.). ALWAYS use when user asks to find or check: int 검사, unsigned int 찾기, unsigned char 검사, unsigned long, signed char, unsigned short, bare int, 원시 타입 검색, 플랫폼 의존 타입, int 대신 uint32_t, stdint 검사, 타입 검사, 타입 안전성 검사, type check, 타입 점검, 명시적 크기 타입. Use proactively when declaring variables, struct members, or function signatures in .c/.h files. Do NOT use for CMSIS vendor headers, System/ startup code, or main() return type."
 user-invokable: false
 ---
 
@@ -15,7 +15,7 @@ Ensures type sizes are predictable and architecture-independent.
 
 ## When to Run
 
-- Executed automatically by `/verify-implementation`
+- Executed automatically by `/check-verify`
 - When declaring variables, struct members, function arguments, or return types
 
 ## Related Files
@@ -59,6 +59,45 @@ int read_adc(void);
 uint32_t counter = 0;
 int32_t delay_time = 1000;
 int32_t read_adc(void);
+```
+
+### Step 2: Implicit Narrowing Detection
+
+Detect assignments where a wider integer type is assigned to a narrower type without explicit cast.
+
+**Detection Approach**:
+
+1. Find variable declarations with narrow types: `(uint8_t|int8_t|uint16_t|int16_t)\s+\w+\s*=`
+2. For each, trace the right-hand side expression:
+   - Function call → check return type in header
+   - Variable → check declaration type
+   - Arithmetic expression → result type follows C promotion rules (typically int/uint32_t)
+3. Flag if RHS type is wider than LHS type AND no explicit cast `(uint16_t)` is present
+
+**Common Narrowing Patterns**:
+
+| Narrowing | Risk | Example |
+|-----------|------|---------|
+| `uint32_t` → `uint16_t` | Silent truncation above 65535 | `uint16_t val = read_adc_32bit();` |
+| `int32_t` → `int16_t` | Sign + magnitude loss | `int16_t temp = calculate_offset();` |
+| `uint32_t` → `uint8_t` | Silent truncation above 255 | `uint8_t idx = count % 512;` |
+| `int` → `uint8_t` | Sign loss + truncation | `uint8_t status = get_status();` |
+
+**PASS**: No implicit narrowing found, or all narrowing uses explicit cast
+**FAIL**: Assignment narrows without explicit cast
+
+**Remediation**:
+```c
+// Before (FAIL) — implicit narrowing
+uint16_t value = read_32bit_register();
+
+// After (PASS) — explicit cast documents intent
+uint16_t value = (uint16_t)read_32bit_register();
+
+// Better — add range check before narrowing
+uint32_t raw = read_32bit_register();
+assert(raw <= UINT16_MAX);
+uint16_t value = (uint16_t)raw;
 ```
 
 ## Exceptions

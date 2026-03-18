@@ -43,8 +43,6 @@ pub fn run(action: ClaudeAction) -> Result<()> {
 }
 
 fn cmd_install(force: bool) -> Result<()> {
-    let (project_dir, config) = load_project()?;
-
     ui::render(element! {
         Header(
             title: "mcuforge claude install".to_string(),
@@ -52,15 +50,40 @@ fn cmd_install(force: bool) -> Result<()> {
     });
     println!();
 
-    let cache_dir = claude::download_skills_package(
-        config
-            .claude
-            .as_ref()
-            .and_then(|c| c.version.as_deref()),
-    )?;
+    match load_project() {
+        Ok((project_dir, config)) => {
+            // === Project mode (existing behavior) ===
+            let cache_dir = claude::download_skills_package(
+                config
+                    .claude
+                    .as_ref()
+                    .and_then(|c| c.version.as_deref()),
+            )?;
+            let report = claude::install_skills(&project_dir, &config, &cache_dir, force)?;
+            print_install_report(&report);
+        }
+        Err(_) => {
+            // === Standalone mode (no embtool.toml) ===
+            let project_dir = std::env::current_dir()?;
+            let cache_dir = claude::download_skills_package(None)?;
+            let report = claude::install_skills_standalone(&project_dir, &cache_dir, force)?;
+            print_install_report(&report);
 
-    let report = claude::install_skills(&project_dir, &config, &cache_dir, force)?;
+            println!();
+            ui::render(element! {
+                StatusLine(
+                    icon: "i".to_string(),
+                    message: "Template skills skipped (no embtool.toml). Create a project to install all skills.".to_string(),
+                    variant: StatusVariant::Info,
+                )
+            });
+        }
+    }
 
+    Ok(())
+}
+
+fn print_install_report(report: &claude::InstallReport) {
     ui::render(element! {
         Section(title: "Installed".to_string(), variant: SectionVariant::Success) {
             #(report.installed.iter().map(|s| {
@@ -82,15 +105,32 @@ fn cmd_install(force: bool) -> Result<()> {
     });
 
     println!();
+
+    let mut summary_parts = vec![format!("{} skills", report.total())];
+    if report.agents_installed > 0 {
+        summary_parts.push(format!("{} agents", report.agents_installed));
+    }
+    if report.hooks_installed > 0 {
+        summary_parts.push(format!("{} hooks", report.hooks_installed));
+    }
+
     ui::render(element! {
         StatusLine(
             icon: "✓".to_string(),
-            message: format!("{} skills installed to .claude/skills/", report.total()),
+            message: format!("{} installed to .claude/", summary_parts.join(", ")),
             variant: StatusVariant::Success,
         )
     });
 
-    Ok(())
+    if report.settings_updated {
+        ui::render(element! {
+            StatusLine(
+                icon: "✓".to_string(),
+                message: "settings.json hooks configuration updated".to_string(),
+                variant: StatusVariant::Success,
+            )
+        });
+    }
 }
 
 fn cmd_update() -> Result<()> {
@@ -106,8 +146,10 @@ fn cmd_update() -> Result<()> {
 }
 
 fn cmd_list(_all: bool) -> Result<()> {
-    let (project_dir, _config) = load_project()?;
-    let skills_dir = project_dir.join(".claude").join("skills");
+    let skills_dir = match load_project() {
+        Ok((dir, _)) => dir.join(".claude").join("skills"),
+        Err(_) => std::env::current_dir()?.join(".claude").join("skills"),
+    };
 
     ui::render(element! {
         Header(title: "mcuforge claude list".to_string())
@@ -184,13 +226,16 @@ fn cmd_sync() -> Result<()> {
 }
 
 fn cmd_status() -> Result<()> {
-    let (project_dir, config) = load_project()?;
-    let skills_dir = project_dir.join(".claude").join("skills");
-
     ui::render(element! {
         Header(title: "mcuforge claude status".to_string())
     });
     println!();
+
+    let (project_dir, config) = match load_project() {
+        Ok((dir, cfg)) => (dir, Some(cfg)),
+        Err(_) => (std::env::current_dir()?, None),
+    };
+    let skills_dir = project_dir.join(".claude").join("skills");
 
     let installed_count = if skills_dir.exists() {
         std::fs::read_dir(&skills_dir)?
@@ -204,40 +249,49 @@ fn cmd_status() -> Result<()> {
         0
     };
 
-    ui::render(element! {
-        Section(title: "Status".to_string()) {
-            ui::Entry(label: "Project".to_string(), value: config.project.name.clone())
-            ui::Entry(label: "MCU".to_string(), value: config.target.mcu.clone())
-            ui::Entry(label: "Skills installed".to_string(), value: installed_count.to_string())
-        }
-    });
-
-    if let Some(ref claude_cfg) = config.claude {
-        println!();
+    if let Some(ref config) = config {
         ui::render(element! {
-            Section(title: "Claude Config".to_string()) {
-                ui::Entry(
-                    label: "Version".to_string(),
-                    value: claude_cfg.version.clone().unwrap_or_else(|| "(none)".into()),
-                )
-                ui::Entry(
-                    label: "GitLab".to_string(),
-                    value: claude_cfg.gitlab.as_ref()
-                        .map(|g| g.url.clone())
-                        .unwrap_or_else(|| "(not configured)".into()),
-                )
-                ui::Entry(
-                    label: "OpenProject".to_string(),
-                    value: claude_cfg.openproject.as_ref()
-                        .map(|o| format!("{} (project #{})", o.url, o.project_id))
-                        .unwrap_or_else(|| "(not configured)".into()),
-                )
+            Section(title: "Status".to_string()) {
+                ui::Entry(label: "Project".to_string(), value: config.project.name.clone())
+                ui::Entry(label: "MCU".to_string(), value: config.target.mcu.clone())
+                ui::Entry(label: "Skills installed".to_string(), value: installed_count.to_string())
             }
         });
+
+        if let Some(ref claude_cfg) = config.claude {
+            println!();
+            ui::render(element! {
+                Section(title: "Claude Config".to_string()) {
+                    ui::Entry(
+                        label: "Version".to_string(),
+                        value: claude_cfg.version.clone().unwrap_or_else(|| "(none)".into()),
+                    )
+                    ui::Entry(
+                        label: "GitLab".to_string(),
+                        value: claude_cfg.gitlab.as_ref()
+                            .map(|g| g.url.clone())
+                            .unwrap_or_else(|| "(not configured)".into()),
+                    )
+                    ui::Entry(
+                        label: "OpenProject".to_string(),
+                        value: claude_cfg.openproject.as_ref()
+                            .map(|o| format!("{} (project #{})", o.url, o.project_id))
+                            .unwrap_or_else(|| "(not configured)".into()),
+                    )
+                }
+            });
+        } else {
+            println!();
+            println!("  [claude] section not found in embtool.toml");
+            println!("  Add it with: mcuforge init --claude");
+        }
     } else {
-        println!();
-        println!("  [claude] section not found in embtool.toml");
-        println!("  Add it with: mcuforge init --claude");
+        ui::render(element! {
+            Section(title: "Status".to_string()) {
+                ui::Entry(label: "Mode".to_string(), value: "standalone (no embtool.toml)".to_string())
+                ui::Entry(label: "Skills installed".to_string(), value: installed_count.to_string())
+            }
+        });
     }
 
     Ok(())

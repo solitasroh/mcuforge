@@ -1,0 +1,290 @@
+---
+name: do-test-gen
+description: "Generates Unity + fff unit tests for C modules on host PC (x86). Handles static function testing via Include-the-Source pattern, cross-compilation with ARM header stubs, bootstrap infrastructure setup, and 7-category boundary value analysis. ALWAYS use this skill when the user mentions: unit test, 단위 테스트, test generation, 테스트 생성, test coverage, 테스트 커버리지, fff fake, mock, boundary testing, 경계값 테스트, edge cases, test setup, Unity framework, host PC test, x86 test build, arm_math.h stub, 스텁 헤더, stub header, header shadowing, static function testing, 테스트 코드 작성, 테스트 추가, 테스트 케이스 추가, 테스트 전략, test strategy, 테스트 가능성 분석, 커버리지 전략, coverage strategy, 테스트 빌드, test build, or wants test code for any Sources/ module (calibration.c, measure.c, insulation_index.c, dio.c, hv.c, module_management.c). Also trigger when user asks to create test files, fake headers, stub headers for x86 cross-compilation, test CMakeLists, add test cases to existing tests, or wants to test specific C functions with normal/boundary/error paths. Do NOT use for integration tests requiring real hardware, running existing tests (ctest), building firmware, or exploratory code analysis questions without test generation intent."
+argument-hint: "<source file or function> [--design] [--stub]"
+user-invokable: true
+---
+
+# Unit Test Generator (Unity + fff)
+
+Generate unit tests for C modules that run on host PC (x86), using Unity for assertions and fff (Fake Function Framework) for mocking hardware dependencies.
+
+## Architecture
+
+```
+Application Logic (test target)
+  measure.c, calibration.c, insulation_index.c
+  → pure calculations, state machines, data transforms
+  → static functions tested via Include-the-Source pattern (#include "module.c")
+────────────────────────────────────────
+HAL Interface (fff fake target)
+  adc.h, dma.h, gpio.h, uart.h, timer.h
+  → FAKE_VALUE_FUNC / FAKE_VOID_FUNC macros
+────────────────────────────────────────
+Hardware (excluded from test)
+  {{mcu}} registers, actual peripherals
+```
+
+## TDD Modes
+
+### `--design` (Test Case Design Only)
+
+Analyze header file (.h) function signatures and produce a test case list **without generating code**. This is the planning step of TDD — deciding what to test before writing test code.
+
+**Usage**: `/do-test-gen --design calibration.h`
+
+**Input**: Header file (.h) or function name
+**Output**: Test case list organized by function, with 3 categories per function:
+
+```markdown
+## Test Case Design: calibration.h
+
+### calibrate_voltage(float raw_adc, const calibration_params_t* params)
+
+| # | Category | Test Case | Input | Expected | Rationale |
+|---|----------|-----------|-------|----------|-----------|
+| 1 | Normal | Valid calibration | raw=2048.0F, valid params | Calibrated value | Happy path |
+| 2 | Boundary | Zero input | raw=0.0F, valid params | 0.0F or offset | Lower bound |
+| 3 | Boundary | Max ADC value | raw=65535.0F, valid params | Max calibrated | Upper bound |
+| 4 | Error | NULL params | raw=1000.0F, params=NULL | Error return | NULL guard |
+| 5 | Error | Zero gain | raw=1000.0F, gain=0.0F | Error return | Division by zero |
+```
+
+**Integration with plan-function-spec**: If a function specification exists (from `/plan-function-spec`), derive test cases directly from:
+- Precondition violations → Error test cases
+- Postcondition verification → Normal test cases
+- Boundary values from spec → Boundary test cases
+- Error cases from spec → Error test cases
+
+### `--stub` (Stub-based TDD — Red Phase)
+
+Generate failing test files from header (.h) only, **before implementation exists**. The function bodies don't exist yet, so linking will fail (Red phase of Red-Green-Refactor).
+
+**Usage**: `/do-test-gen --stub new_module.h`
+
+**Output**: `test_new_module.c` with test cases that call declared-but-not-yet-implemented functions.
+
+**Key difference from normal mode**:
+- Does NOT read .c file (it doesn't exist yet)
+- Uses only .h declarations for test targets
+- Expects link error as normal (Red phase)
+- After implementation (Green phase), tests should pass
+
+```c
+// Generated for --stub mode
+// Expected: Link error until new_module.c is implemented
+#include "unity.h"
+#include "new_module.h"  // declarations only, no .c yet
+
+void test_new_function_normal(void) {
+    // Green: implement new_function() in new_module.c to make this pass
+    int32_t result = new_function(42);
+    TEST_ASSERT_EQUAL_INT32(expected_value, result);
+}
+```
+
+## Workflow
+
+### Step 0: Bootstrap Check
+
+If `tests/` directory does not exist, create the entire test infrastructure first.
+See `references/bootstrap-template.md` for:
+- `tests/` directory structure (unit, fakes, stubs, support)
+- `tests/CMakeLists.txt` template (FetchContent Unity v2.6.0 + fff v1.1)
+- `tests/CMakePresets.json` template (Test configure/build/test + JUnit XML)
+
+### Step 1: Analyze Target
+
+1. Read the target source file completely
+2. Extract `#include` dependencies — classify each as:
+   - **Application header** (Sources/): may contain types/constants needed by test
+   - **Driver header** (Drivers/): fake target
+   - **Component header** (Components/): check if fakeable or needs stub
+   - **ARM/CMSIS header** (arm_math.h, core_cm4.h, {{mcu}}.h): needs x86 stub
+3. Parse function signatures:
+   - **Public functions**: declared in `.h`, tested directly
+   - **Static functions**: internal to `.c`, require Include-the-Source pattern (Step 4)
+4. Identify all called functions that must be faked or stubbed
+
+### Step 2: Cross-Compilation Setup
+
+ARM-specific headers cannot compile on x86. Use **header shadowing** via include path priority:
+
+```cmake
+target_include_directories(test_target PRIVATE
+    ${TEST_DIR}/stubs      # x86 stubs FIRST (arm_math.h, core_cm4.h, define.h)
+    ${TEST_DIR}/support    # test support headers
+    ${TEST_DIR}/fakes      # fff fake headers
+    ${SOURCES_DIR}         # Application source
+    ${COMPONENTS_DIR}      # Component headers
+    ${INCLUDE_DIR}         # Project includes
+    ${DRIVERS_DIR}         # Driver headers (only types, faked at link time)
+)
+```
+
+The stubs directory must shadow these ARM headers. See `references/x86-stubs.md` for complete stub files:
+- `stubs/CMSIS/arm_math.h` — float32_t typedef, arm_sqrt_f32 → sqrtf delegation
+- `stubs/CMSIS/core_cm4.h` — __get_PRIMASK, __set_PRIMASK, __DSB, __ISB as no-ops
+- `stubs/CMSIS/core_cmFunc.h` — redirect to core_cm4.h
+- `stubs/mcu/{{mcu}}.h` — clock constants, NVIC_Type, SCB stub structs
+- `stubs/mcu/define.h` — CRITICAL_SECTION, nvic_*, protect_* as no-ops
+
+### Step 3: Generate fff Fakes
+
+For each driver/component dependency → `tests/fakes/fake_<module>.h`:
+
+```c
+#ifndef FAKE_<MODULE>_H
+#define FAKE_<MODULE>_H
+
+#include "fff.h"
+#include "<original_header>.h"   // for types only
+
+FAKE_VALUE_FUNC(int, function_with_return, param_type);
+FAKE_VOID_FUNC(function_without_return, param_type);
+
+#endif
+```
+
+Rules:
+- Fake header MUST use the **same include guard** as the original header to preempt it
+  - Example: if `hv.h` has `#ifndef __HV_H__`, then `fake_hv.h` defines `#ifndef __HV_H__`
+  - This ensures `#include "hv.h"` in the source resolves to the fake
+- OR place fake headers earlier in include path so they shadow the originals
+- Reset all fakes in `setUp()`: call `RESET_FAKE(function_name)` for each, plus `FFF_RESET_HISTORY()`
+
+### Step 4: Generate Test File — Include-the-Source Pattern
+
+This is the **primary pattern** for testing static functions. The test file includes the `.c` source directly:
+
+```c
+#include "fff.h"
+#include "unity.h"
+DEFINE_FFF_GLOBALS;
+
+/* Fakes FIRST — preempt real headers via include guard */
+#include "fake_hv.h"
+#include "fake_log.h"
+#include "fake_setup_management.h"
+
+/* Include the .c source (NOT .h) — exposes static functions */
+#include "calibration.c"
+```
+
+**Critical rules**:
+1. **Include order**: `fff.h` + `unity.h` → fake headers → `module.c`
+2. Fake headers MUST come before `module.c` so they preempt real dependency headers
+3. The `.c` file is included, NOT compiled separately — do NOT add `module.c` to `add_executable()` sources in CMake
+4. All static functions, static variables, and file-scope state become accessible in the test
+
+**CMake target for Include-the-Source**:
+
+```cmake
+add_executable(test_calibration
+    ${TEST_DIR}/unit/test_calibration.c
+    # Do NOT list calibration.c here — it is #included in the test file
+)
+```
+
+**When NOT to use Include-the-Source**: If only testing public functions and the module has no static functions of interest, use normal linking instead:
+
+```cmake
+add_executable(test_module
+    ${TEST_DIR}/unit/test_module.c
+    ${SOURCES_DIR}/module.c          # compiled separately, linked
+)
+```
+
+### Step 5: Boundary Value Analysis
+
+Apply the 7-category checklist from `references/boundary-checklist.md` to each function under test:
+
+1. Guard conditions (0, NULL, negative)
+2. Threshold boundaries (exact, +epsilon, -epsilon)
+3. Return value guards (e.g., current <= 0 → INFINITY)
+4. Normal operation range
+5. Special float values (NaN, INF, -INF)
+6. Extreme values (FLT_MIN, FLT_MAX, subnormal)
+7. Domain-specific (ADC: 0~65535, V_REF boundaries)
+
+### Step 6: Compile Verification
+
+After generating all test files, verify they compile:
+
+```bash
+cd tests
+cmake --preset Test
+cmake --build --preset Test
+```
+
+Fix any compilation errors before finishing. Common issues:
+- Missing fake declarations → add `FAKE_VALUE_FUNC` / `FAKE_VOID_FUNC`
+- Missing type definitions → add to support header or stub
+- Duplicate symbol → module.c was added to both test sources AND CMake target
+
+## Test File Structure
+
+```c
+#include "fff.h"
+#include "unity.h"
+DEFINE_FFF_GLOBALS;
+
+#include "fake_<driver>.h"
+#include "<module>.c"     // or .h if only testing public functions
+
+void setUp(void) {
+    RESET_FAKE(<faked_function>);
+    FFF_RESET_HISTORY();
+    // Reset static state if needed
+}
+
+void tearDown(void) {}
+
+// --- Guard conditions ---
+void test_<function>_zero_input(void) {
+    // Given: zero/null input
+    // When: call function
+    // Then: assert guard behavior
+}
+
+// --- Normal operation ---
+void test_<function>_normal(void) {
+    // Given: valid input
+    // When: call function
+    // Then: assert expected result
+}
+
+// --- Boundary ---
+void test_<function>_threshold_boundary(void) {
+    // Given: value at exact threshold
+    // When: call function
+    // Then: assert boundary behavior
+}
+
+int main(void) {
+    UNITY_BEGIN();
+    RUN_TEST(test_<function>_zero_input);
+    RUN_TEST(test_<function>_normal);
+    RUN_TEST(test_<function>_threshold_boundary);
+    return UNITY_END();
+}
+```
+
+## Test Priority by Module
+
+| Module | Testability | Cross-compile Difficulty | Reason | Fake Targets |
+|--------|------------|-------------------------|--------|--------------|
+| calibration.c | High | Medium (arm_math.h) | Pure math, no side effects | hv.h, log.h |
+| measure.c | Medium | Medium (arm_math.h) | Separable calc logic | adc_gathering.h |
+| insulation_index.c | Medium | Low | State machine + index calc | hv.h, dio.h, measure.h, wtask.h |
+| module_management.c | Medium | Low | Protocol parsing | uart.h |
+| dio.c | Medium | Low | GPIO abstraction | gpio_hal.h, wtask.h |
+| hv.c | Low | High (register access) | Heavy HW dependency | gpio.h, adc.h |
+
+## fff → CMock Migration Criteria
+
+| Condition | Current | Migration Trigger |
+|-----------|---------|-------------------|
+| Mock target functions | ~50 | >50 functions |
+| Call order verification | Not needed | Safety certification |
+| CI Ruby environment | Not available | Docker standard image |

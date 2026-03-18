@@ -1,38 +1,19 @@
 #!/bin/bash
 # [PreToolUse] Write|Edit - blocking (exit 2)
-# Drivers/ 파일이 Sources/ 헤더를 include하는 역참조 차단
-# 계층 규칙: Sources/ → Drivers/ (OK), Drivers/ → Sources/ (차단)
+# Drivers/ must not include Sources/ headers (layer violation)
 
-INPUT=$(cat)
+source "$(dirname "$0")/lib/common.sh"
+hook_parse_input
+hook_require_filepath
 
-FILE_PATH=$(echo "$INPUT" | grep -o '"file_path":"[^"]*"' | sed 's/"file_path":"//;s/"//')
+# Only check files inside Drivers/
+echo "$FILE_PATH" | grep -qE '(^|/)Drivers/' || exit 0
 
-if [ -z "$FILE_PATH" ]; then
-	exit 0
-fi
+hook_require_c_file
+hook_require_code
 
-# Drivers/ 내 파일만 검사
-if ! echo "$FILE_PATH" | grep -qE '/Drivers/'; then
-	exit 0
-fi
-
-case "$FILE_PATH" in
-	*.c | *.h) ;;
-	*) exit 0 ;;
-esac
-
-CODE=$(echo "$INPUT" | sed -n 's/.*"new_string":"\([^"]*\)".*/\1/p')
-if [ -z "$CODE" ]; then
-	CODE=$(echo "$INPUT" | sed -n 's/.*"content":"\([^"]*\)".*/\1/p')
-fi
-
-if [ -z "$CODE" ]; then
-	exit 0
-fi
-
-# Sources/ 헤더를 include하는지 검사
-# 패턴: #include "measure.h", #include "calibration.h" 등 Sources/ 파일 참조
-SOURCES_HEADERS=$(ls Sources/*.h 2>/dev/null | xargs -I{} basename {} 2>/dev/null)
+# Collect all Sources/ header basenames
+SOURCES_HEADERS=$(find Sources/ -name "*.h" -exec basename {} \; 2>/dev/null || true)
 
 VIOLATIONS=""
 for header in $SOURCES_HEADERS; do
@@ -42,11 +23,10 @@ for header in $SOURCES_HEADERS; do
 done
 
 if [ -n "$VIOLATIONS" ]; then
-	echo "BLOCKED: Drivers/ 파일이 Sources/ 헤더를 참조합니다 (계층 역참조)." >&2
-	echo "규칙: Drivers/ → Sources/ 방향 의존은 금지됩니다." >&2
-	echo "위반:" >&2
+	echo "Rule: Drivers/ -> Sources/ dependency is forbidden." >&2
+	echo "Violations:" >&2
 	echo -e "$VIOLATIONS" >&2
-	exit 2
+	hook_block "Drivers/ file includes Sources/ header (layer violation)."
 fi
 
 exit 0

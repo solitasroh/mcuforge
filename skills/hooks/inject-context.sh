@@ -1,10 +1,16 @@
 #!/bin/bash
 # [SessionStart] - non-blocking
-# 세션 시작 시 프로젝트 컨텍스트를 Claude에 주입
+# Inject project context at session start + clean old cache files
+
+# Clean old session-summary files (keep latest 20)
+CACHE_DIR=".claude/cache"
+if [ -d "$CACHE_DIR" ]; then
+	ls -1t "$CACHE_DIR"/session-summary-*.md 2>/dev/null | tail -n +21 | xargs rm -f 2>/dev/null
+fi
 
 echo "=== Project Context ==="
 
-# 현재 브랜치 및 OP 번호
+# Current branch and OP number
 BRANCH=$(git branch --show-current 2>/dev/null)
 if [ -n "$BRANCH" ]; then
 	echo "Branch: $BRANCH"
@@ -14,20 +20,20 @@ if [ -n "$BRANCH" ]; then
 	fi
 fi
 
-# 최근 3개 커밋
+# Recent 3 commits
 echo ""
 echo "Recent commits:"
 git log --oneline -3 2>/dev/null || true
 
-# 마지막 빌드 결과 (Flash/RAM)
-ELF_FILE="output/a2750irm.elf"
-if [ -f "$ELF_FILE" ]; then
+# Last build size (find ELF file dynamically)
+ELF_FILE=$(find output/ -name "*.elf" -type f 2>/dev/null | head -1)
+if [ -n "$ELF_FILE" ] && [ -f "$ELF_FILE" ]; then
 	echo ""
 	echo "Last build size:"
 	arm-none-eabi-size "$ELF_FILE" 2>/dev/null || true
 fi
 
-# 현재 수정된 파일
+# Modified files
 MODIFIED=$(git status --short 2>/dev/null)
 if [ -n "$MODIFIED" ]; then
 	echo ""
@@ -35,7 +41,7 @@ if [ -n "$MODIFIED" ]; then
 	echo "$MODIFIED"
 fi
 
-# TODO/FIXME 수
+# TODO/FIXME count
 TODO_COUNT=$(grep -rnE 'TODO|FIXME|HACK|XXX' Sources/ Drivers/ --include="*.c" --include="*.h" 2>/dev/null | wc -l)
 if [ "$TODO_COUNT" -gt 0 ]; then
 	echo ""

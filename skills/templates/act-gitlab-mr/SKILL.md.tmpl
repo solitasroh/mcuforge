@@ -1,0 +1,199 @@
+---
+name: act-gitlab-mr
+description: "ALWAYS use when managing GitLab Merge Requests via glab CLI: create, list, view, merge, comment (glab mr note), close, and link to OpenProject issues. ALWAYS use when user mentions MR 만들어, merge request, 머지, MR 목록, MR 상세, MR 보기, MR 코멘트 달기, MR 닫기, 코드리뷰 요청, OP/# 번호로 MR 생성, or branch push for review. Do NOT use for OpenProject WP CRUD without MR context (use plan-openproject), git commit (use act-commit), MR diff code review and posting review findings (use check-mr-review), or changelog generation (use act-changelog)."
+argument-hint: "자연어로 요청 (예: 'MR 만들어줘', 'MR 목록', '#960으로 MR 생성')"
+user-invokable: true
+---
+
+# GitLab Merge Request 관리
+
+사용자의 자연어 요청을 해석하여 `glab` CLI로 GitLab MR을 관리한다.
+
+## 환경
+
+- **GitLab**: `{{gitlab_url}}` (ssh: port {{gitlab_ssh_port}})
+- **glab CLI**: 설치 확인 `glab --version`, 인증 `glab auth status`
+- **기본 target branch**: `develop`
+
+## 해석 프로세스
+
+### Step 1: 의도 파악
+
+| 사용자 표현 | 의도 | 명령 |
+|------------|------|------|
+| "MR 만들어줘", "코드리뷰 요청" | MR 생성 | `glab mr create` |
+| "MR 목록", "열린 MR" | MR 목록 조회 | `glab mr list` |
+| "MR !5 확인", "MR 상세" | MR 상세 조회 | `glab mr view` |
+| "MR 머지", "MR 합쳐줘" | MR 머지 | `glab mr merge` |
+| "MR에 코멘트", "리뷰 의견" | MR 코멘트 | `glab mr note` |
+| "MR diff", "변경사항 확인" | MR diff 조회 | `glab mr diff` |
+| "MR 닫아줘" | MR 닫기 | `glab mr close` |
+| "#960으로 MR", "OP#960 MR" | OP 이슈 연동 MR 생성 | 생성 + OP 연동 |
+
+### Step 2: OpenProject 연동 판단
+
+사용자 요청에 OP 이슈 번호가 있거나, 현재 브랜치에 `OP-XXX` 패턴이 있으면 연동한다.
+
+**OP 이슈 번호 추출 우선순위**:
+1. 사용자가 직접 지정 ("OP#960", "#960")
+2. 현재 브랜치명에서 추출 (`feature/OP-960-description` → 960)
+3. 없으면 연동 없이 진행
+
+**연동 시 동작**:
+- MR 제목에 `[OP#960]` 프리픽스 추가
+- MR 설명에 OP 이슈 링크 포함: `{{gitlab_url}}:8080/work_packages/960`
+- MR 생성 후 OP 이슈 상태를 "진행중(17)"으로 변경할지 사용자에게 확인
+- MR 머지 후 OP 이슈 상태를 "완료(18)"로 변경할지 사용자에게 확인
+
+OP 상태 변경은 plan-openproject 스킬의 op.py를 호출:
+```bash
+python .claude/skills/plan-openproject/scripts/op.py wp update {ID} --status-id {N}
+```
+
+### Step 3: 명령 실행
+
+## MR 생성 워크플로우
+
+MR 생성은 가장 복잡한 워크플로우로, 단계별로 진행한다:
+
+### 1. 사전 확인
+```bash
+glab --version          # glab 설치 확인
+glab auth status        # 인증 확인
+git status              # 워킹 디렉토리 상태
+```
+- 커밋되지 않은 변경이 있으면 커밋/스태시 안내
+- glab 미설치 시: `winget install glab.glab`
+- 미인증 시: `glab auth login --hostname {{gitlab_url_host}}`
+
+### 2. 브랜치 처리
+
+사용자 시나리오별 처리:
+
+| 시나리오 | 동작 |
+|---------|------|
+| 이미 feature 브랜치에 있음 | 그대로 사용 |
+| main/develop에 있고 새 브랜치 요청 | `git checkout -b {branch}` |
+| 브랜치명 미지정 | OP 번호 + 커밋 내용으로 자동 생성 |
+
+**브랜치 네이밍 컨벤션**:
+```
+{type}/OP-{issue_id}-{short-description}
+```
+- type: `feature` | `fix` | `refactor` | `hotfix`
+- 예: `feature/OP-960-measure-improved`, `fix/OP-1010-di-error-handling`
+
+사용자가 "버그 수정 MR"이라고 하면 → `fix/OP-XXX-...`
+사용자가 "기능 추가 MR"이라고 하면 → `feature/OP-XXX-...`
+
+### 3. 푸시 + MR 생성
+```bash
+git push -u origin {branch}
+glab mr create --draft --target-branch develop \
+  --title "[OP#960] feat(measure): 계측 로직 개선" \
+  --description "{description}" \
+  --no-editor --yes
+```
+
+### 4. MR 설명 생성
+
+MR 설명은 아래 템플릿을 기반으로 자동 생성:
+
+```markdown
+## 요약
+- 변경 내용 1~3줄 요약
+
+## 관련 이슈
+- OpenProject: [OP#960]({{gitlab_url}}:8080/work_packages/960)
+
+## 변경 파일
+- `Sources/measure.c` — 계측 로직 개선
+- `Sources/calibration.c` — 2-세그먼트 캘리브레이션
+
+## 테스트
+- [ ] 빌드 확인 (Release/Debug)
+- [ ] 기능 테스트
+```
+
+커밋 히스토리 (`git log develop..HEAD --oneline`)를 분석하여 요약과 변경 파일을 자동 채운다.
+
+## MR 목록 조회
+
+```bash
+# 열린 MR (기본)
+glab mr list
+
+# 내 MR
+glab mr list --assignee=@me
+
+# 머지된 MR
+glab mr list -M
+
+# 닫힌 MR
+glab mr list -c
+
+# JSON 출력
+glab mr list -F json
+```
+
+## MR 상세 / diff / 코멘트
+
+```bash
+# MR 상세
+glab mr view {id}
+
+# MR diff
+glab mr diff {id}
+
+# 코멘트 추가
+glab mr note {id} -m "리뷰 코멘트"
+```
+
+## MR 머지
+
+```bash
+glab mr merge {id}
+
+# 소스 브랜치 삭제 포함
+glab mr merge {id} --remove-source-branch
+
+# 스쿼시 머지
+glab mr merge {id} --squash-before-merge
+```
+
+머지 후 OP 이슈 연동:
+- MR 제목에서 OP 번호 추출
+- "OP 이슈 #960을 완료(Done)로 변경할까요?" 확인
+- 승인 시: `op.py wp update 960 --status-id 18`
+
+## 응답 포맷
+
+**MR 목록** — 테이블:
+```
+| !ID | 상태 | 브랜치 | 제목 | 작성자 |
+|-----|------|--------|------|--------|
+| !12 | Draft | feature/OP-960-... | [OP#960] feat: ... | soojang |
+```
+
+**MR 생성 결과** — 한 줄 확인:
+```
+MR !12 생성 완료 (Draft) → develop ← feature/OP-960-measure-improved
+URL: {{gitlab_url}}/mcu/source/{{project_name}}_application/-/merge_requests/12
+```
+
+**MR 머지 결과**:
+```
+MR !12 머지 완료 → develop
+OP#960 상태: 완료(Done)로 변경됨
+```
+
+## 규칙
+
+- 모든 응답은 한글
+- MR 번호는 `!번호` 형식 (GitLab 관례)
+- OP 이슈 번호는 `#번호` 또는 `OP#번호` 형식
+- MR 생성 시 기본 `--draft` (Draft MR)
+- target branch 기본: `develop` (사용자가 달리 지정 가능)
+- MR 머지 및 OP 상태 변경은 반드시 사용자 확인 후 실행
+- 커밋되지 않은 변경 있으면 MR 생성 전 경고
+- glab 미설치/미인증 시 설치/인증 가이드 안내

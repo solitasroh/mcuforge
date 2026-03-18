@@ -27,6 +27,14 @@ impl TemplateContext {
         if let Some(ref claude) = config.claude {
             if let Some(ref gitlab) = claude.gitlab {
                 vars.insert("gitlab_url".into(), gitlab.url.clone());
+                // Extract host from URL (e.g., "http://10.10.20.32" → "10.10.20.32")
+                let host = gitlab
+                    .url
+                    .trim_start_matches("https://")
+                    .trim_start_matches("http://")
+                    .trim_end_matches('/')
+                    .to_string();
+                vars.insert("gitlab_url_host".into(), host);
                 vars.insert(
                     "gitlab_ssh_port".into(),
                     gitlab.ssh_port.unwrap_or(22).to_string(),
@@ -181,8 +189,14 @@ pub fn install_skills(
 
     // Agents
     copy_dir_if_exists(&cache_dir.join("agents"), &agents_dir)?;
+    report.agents_installed = count_files_in_dir(&agents_dir, "md");
+
     // Hooks
     copy_dir_if_exists(&cache_dir.join("hooks"), &hooks_dir)?;
+    report.hooks_installed = count_files_in_dir(&hooks_dir, "sh");
+
+    // Install settings.json (hooks configuration)
+    report.settings_updated = install_settings_json(cache_dir, &claude_dir)?;
 
     // Update CLAUDE.md skills section
     update_claude_md_skills_section(project_dir)?;
@@ -324,6 +338,62 @@ fn update_claude_md_skills_section(project_dir: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn count_files_in_dir(dir: &Path, extension: &str) -> usize {
+    fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    e.path()
+                        .extension()
+                        .map(|ext| ext == extension)
+                        .unwrap_or(false)
+                })
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+/// Install settings.json by merging hooks section into existing settings
+fn install_settings_json(cache_dir: &Path, claude_dir: &Path) -> Result<bool> {
+    let tmpl_path = cache_dir.join("settings.json.tmpl");
+    if !tmpl_path.exists() {
+        return Ok(false);
+    }
+
+    let settings_path = claude_dir.join("settings.json");
+    let new_content = fs::read_to_string(&tmpl_path)?;
+    let new_json: serde_json::Value =
+        serde_json::from_str(&new_content).context("Failed to parse settings.json.tmpl")?;
+
+    if settings_path.exists() {
+        // Merge: preserve existing settings, update hooks section only
+        let existing_content = fs::read_to_string(&settings_path)?;
+        let mut existing_json: serde_json::Value = serde_json::from_str(&existing_content)
+            .context("Failed to parse existing settings.json")?;
+
+        if let Some(hooks) = new_json.get("hooks") {
+            existing_json
+                .as_object_mut()
+                .context("settings.json is not an object")?
+                .insert("hooks".to_string(), hooks.clone());
+        }
+
+        fs::write(
+            &settings_path,
+            serde_json::to_string_pretty(&existing_json)?,
+        )?;
+    } else {
+        // Create new
+        fs::write(
+            &settings_path,
+            serde_json::to_string_pretty(&new_json)?,
+        )?;
+    }
+
+    Ok(true)
 }
 
 fn write_installed_manifest(claude_dir: &Path, report: &InstallReport) -> Result<()> {
@@ -610,12 +680,54 @@ pub struct InstallReport {
     pub installed: Vec<String>,
     pub templates: Vec<String>,
     pub skipped: Vec<String>,
+    pub hooks_installed: usize,
+    pub agents_installed: usize,
+    pub settings_updated: bool,
 }
 
 impl InstallReport {
     pub fn total(&self) -> usize {
         self.installed.len() + self.templates.len()
     }
+}
+
+/// Install skills without project config (standalone mode)
+/// Only installs universal + embedded-c skills, skips templates
+pub fn install_skills_standalone(
+    project_dir: &Path,
+    cache_dir: &Path,
+    force: bool,
+) -> Result<InstallReport> {
+    let claude_dir = project_dir.join(".claude");
+    let skills_dir = claude_dir.join("skills");
+    let agents_dir = claude_dir.join("agents");
+    let hooks_dir = claude_dir.join("hooks");
+
+    fs::create_dir_all(&skills_dir)?;
+    fs::create_dir_all(&agents_dir)?;
+    fs::create_dir_all(&hooks_dir)?;
+
+    let mut report = InstallReport::default();
+
+    // Universal + Embedded-C only (no template rendering needed)
+    install_category(&cache_dir.join("universal"), &skills_dir, force, &mut report)?;
+    install_category(&cache_dir.join("embedded-c"), &skills_dir, force, &mut report)?;
+
+    // Agents
+    copy_dir_if_exists(&cache_dir.join("agents"), &agents_dir)?;
+    report.agents_installed = count_files_in_dir(&agents_dir, "md");
+
+    // Hooks
+    copy_dir_if_exists(&cache_dir.join("hooks"), &hooks_dir)?;
+    report.hooks_installed = count_files_in_dir(&hooks_dir, "sh");
+
+    // Install settings.json (hooks configuration)
+    report.settings_updated = install_settings_json(cache_dir, &claude_dir)?;
+
+    // Manifest
+    write_installed_manifest(&claude_dir, &report)?;
+
+    Ok(report)
 }
 
 /// Generate the [claude] section for embtool.toml
@@ -626,7 +738,7 @@ pub fn generate_claude_toml_section(
     op_project_id: Option<u32>,
 ) -> String {
     let mut section = String::new();
-    section.push_str("\n[claude]\nversion = \"1.0.0\"\n");
+    section.push_str("\n[claude]\nversion = \"2.0.0\"\n");
     section.push_str("\n[claude.skills]\nuniversal = true\nembedded_c = true\n");
 
     if let Some(url) = gitlab_url {

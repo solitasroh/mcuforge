@@ -1,0 +1,66 @@
+---
+name: ref-architecture
+description: "Provides {{mcu}} ({{core}}) architecture reference: memory map, interrupt vectors, clock tree, and bus structure. Use when writing code that interacts with MCU-specific features or debugging hardware-related issues. Do NOT use for application-level logic unrelated to hardware."
+disable-model-invocation: true
+---
+
+# {{mcu}} Architecture Knowledge
+
+## Overview
+
+- **Core**: ARM {{core}} (ARMv7E-M)
+- **FPU**: No (Soft-float required)
+- **Clock**: Up to 72 MHz (System), 36 MHz (Bus)
+- **Flash**: 256 KB (app area: 192 KB, bootloader: 64 KB)
+- **SRAM**: 64 KB (32 KB SRAM_L + 32 KB SRAM_U)
+
+## Memory Map
+
+| Region | Start | End | Size | Description |
+|---|---|---|---|---|
+| Bootloader | `0x0000_0000` | `0x0000_FFFF` | 64 KB | Bootloader (reserved) |
+| Flash (App) | `0x0001_0000` | `0x0003_FFFF` | 192 KB | Application Code & Constants |
+| SRAM_L | `0x1FFF_8000` | `0x1FFF_FFFF` | 32 KB | Lower SRAM (Data/BSS/Stack) |
+| SRAM_U | `0x2000_0000` | `0x2000_7FFF` | 32 KB | Upper SRAM (Memory Pool) |
+| Peripherals | `0x4000_0000` | `0x400F_FFFF` | 1 MB | AIPS-Lite Peripheral Bridge |
+| Private Periph | `0xE000_0000` | `0xE00F_FFFF` | 1 MB | NVIC, SysTick, SCB |
+
+## Interrupt Vector Table
+
+Located at `0x0000_0000` (Flash start). Relocatable to SRAM via VTOR (`0xE000ED08`).
+
+| IRQ | Source | Description |
+|---|---|---|
+| - | Reset | Initial PC and SP |
+| - | NMI | Non-Maskable Interrupt |
+| - | HardFault | All fault conditions |
+| 0-15 | DMA0-15 | DMA transfer complete |
+| 31 | ADC0 | ADC0 conversion complete |
+| 32 | ADC1 | ADC1 conversion complete |
+| 33 | FTM0 | FlexTimer 0 |
+| 34 | FTM1 | FlexTimer 1 |
+| 44 | UART0 | UART0 Status/Error |
+| 45 | UART1 | UART1 Status/Error |
+
+## System Constraints
+
+- **Stack Size**: 0x0600 (1.5KB) — see `System/linkerscript.ld`
+- **Heap**: Minimal or zero (Avoid `malloc` in critical paths)
+- **Endianness**: Little-endian
+- **Alignment**:
+    - 4-byte alignment for 32-bit access
+    - Instructions must be half-word aligned
+
+## Boot Sequence
+
+1. Hardware Reset
+2. Fetch MSP from `0x0000_0000`
+3. Fetch PC from `0x0000_0004` (Reset_Handler)
+4. `SystemInit()` (Clock setup, WDT disable)
+5. `__libc_init_array()` (C++ constructors/static init)
+6. `main()`
+
+## Related Files
+- `System/system_MK10D10.c`: Clock configuration
+- `System/startup_MK10D10.s`: Vector table and Reset_Handler
+- `System/linkerscript.ld`: Linker script defining memory regions

@@ -1,0 +1,175 @@
+---
+name: check-mr-review
+description: "ALWAYS use when reviewing GitLab MR diff and posting review findings as MR comments via glab CLI. ALWAYS use when user mentions MR 리뷰, MR review, MR 검토, MR 코드 리뷰, MR 안전성 리뷰, MR 코멘트 게시, MR 라인 코멘트, self-review before merge, or wants to review any MR (!번호). Do NOT use for local file/branch code review without MR (use check-code-review), code quality metrics (use plan-quality-audit), or MR creation/management (use act-gitlab-mr)."
+argument-hint: "[!MR_ID] (생략 시 목록에서 선택)"
+user-invokable: true
+---
+
+# GitLab MR 코드 리뷰
+
+GitLab MR의 diff를 가져와 임베디드 펌웨어 관점에서 코드 리뷰를 수행하고, 결과를 MR 코멘트로 게시한다.
+
+## Step 1: 환경 확인
+
+```bash
+glab --version
+glab auth status
+```
+
+- `glab` 미설치 시: `winget install glab.glab` 안내 후 종료
+- 미인증 시: `glab auth login --hostname {{gitlab_url_host}}` 안내 후 종료
+
+## Step 2: MR 선택
+
+- **인자 있음** (`!5` 또는 `5`) → 해당 MR 사용
+- **인자 없음**:
+  1. `glab mr list` 로 열린 MR 목록 테이블 표시:
+     ```
+     | !ID | 상태 | 브랜치 | 제목 | 작성자 |
+     |-----|------|--------|------|--------|
+     ```
+  2. 사용자에게 MR 번호 선택 요청 (AskUserQuestion)
+- MR 0개면 "열린 MR이 없습니다" 표시 후 종료
+
+## Step 3: MR 정보 및 Diff 수집
+
+```bash
+# 메타데이터 (제목, 브랜치, 작성자)
+glab mr view {id}
+
+# 전체 diff
+glab mr diff {id}
+
+# diff_refs (라인 코멘트용 base_sha, head_sha, start_sha)
+glab api "projects/:fullpath/merge_requests/{iid}"
+```
+
+- 변경 파일 중 `Sources/`, `Drivers/`의 `.c/.h` 파일만 리뷰 대상으로 필터링
+- 코드 파일 변경이 없으면 "리뷰 대상 코드 파일이 없습니다" 안내 후 종료
+
+## Step 4: 컨텍스트 보강
+
+- 변경된 `.c/.h` 파일 전체 내용을 Read 도구로 읽기 (diff 주변 맥락 파악)
+- 리뷰 범위 요약 표시:
+
+```
+## MR !{id} 리뷰 시작
+- 제목: {title}
+- 브랜치: {source_branch} → {target_branch}
+- 변경 파일: {N}개, +{additions} / -{deletions} 줄
+```
+
+## Step 5: 임베디드 코드 리뷰 수행
+
+`embedded-reviewer` 에이전트에 diff + 파일 컨텍스트를 전달하여 리뷰 수행.
+
+**Agent 도구 호출 시 프롬프트에 포함할 내용**:
+- MR diff 전문
+- 변경 파일 전체 소스 (컨텍스트용)
+- 리뷰 기준: Safety → Correctness → Architecture → Performance 순서
+
+**리뷰 기준** (embedded-reviewer 에이전트 기준):
+
+1. **Safety (Critical)**: ISR 안전성, volatile 사용, 동시성, 메모리 안전
+2. **Correctness**: 주변기기 접근, 타입 안전, 에러 핸들링
+3. **Architecture**: 모듈 설계, 네이밍 컨벤션, static 스코핑
+4. **Performance**: float 리터럴 F 접미사, DMA 사용, critical section 최소화
+
+**각 이슈 포맷**:
+- 파일:줄번호
+- 심각도: Critical / Warning / Suggestion
+- 설명
+- 수정 제안 (코드 예시)
+
+## Step 6: 리뷰 결과 표시 + 게시 방식 선택
+
+로컬에 리뷰 보고서 테이블 표시 후, 사용자에게 게시 방식 선택 요청 (AskUserQuestion):
+
+| 옵션 | 설명 |
+|------|------|
+| **a) 요약 코멘트** | `glab mr note {id}` 로 전체 보고서 1개 게시 |
+| **b) 라인 코멘트** | `glab api` 로 각 이슈를 해당 줄에 discussion 게시 |
+| **c) 요약 + 라인** | 요약 1개 + Critical/Warning만 라인 코멘트 |
+| **d) 게시 안 함** | 로컬 확인만 |
+
+## Step 7: 코멘트 게시 + 완료 보고
+
+선택한 방식으로 게시 실행:
+
+### 요약 코멘트
+
+```bash
+glab mr note {id} -m "{review_summary}"
+```
+
+요약 코멘트 포맷:
+```markdown
+## 🔍 임베디드 코드 리뷰 결과
+
+### Critical Issues (N건)
+- **file.c:42** — ISR 내 blocking call ...
+
+### Warnings (N건)
+- **file.c:100** — volatile 누락 ...
+
+### Suggestions (N건)
+- **file.c:200** — float 리터럴 F 접미사 ...
+
+> 🤖 Automated review by embedded-reviewer
+```
+
+### 라인 코멘트
+
+GitLab Discussions API를 사용하여 각 이슈를 해당 줄에 게시:
+
+```bash
+glab api --method POST "projects/:fullpath/merge_requests/{iid}/discussions" \
+  -f "body={comment_body}" \
+  -f "position[base_sha]={base_sha}" \
+  -f "position[head_sha]={head_sha}" \
+  -f "position[start_sha]={start_sha}" \
+  -f "position[position_type]=text" \
+  -f "position[new_path]={file_path}" \
+  -f "position[new_line]={line_number}"
+```
+
+라인 코멘트 포맷:
+```markdown
+**[Warning]** volatile 누락: ISR에서 접근하는 `shared_var`에 volatile 선언 필요
+
+```c
+// Before
+static uint32_t shared_var;
+// After
+static volatile uint32_t shared_var;
+```
+
+> 🤖 embedded-reviewer
+```
+
+### 완료 보고
+
+```
+## MR !{id} 리뷰 완료
+- Critical: {N}건, Warning: {N}건, Suggestion: {N}건
+- 게시: 요약 코멘트 1건 + 라인 코멘트 {N}건
+- URL: {mr_url}
+```
+
+## 에러 처리
+
+| 상황 | 처리 |
+|------|------|
+| glab 미설치/미인증 | 가이드 표시 후 종료 |
+| MR 없음/ID 무효 | 메시지 표시 후 종료 |
+| 코드 파일 변경 없음 | 리뷰 생략 안내 |
+| 라인 코멘트 API 실패 | 경고 표시 후 요약 코멘트로 폴백 |
+| diff >2000줄 | 파일별 분할하여 순차 리뷰 |
+
+## 규칙
+
+- 모든 응답은 한글
+- MR 번호는 `!번호` 형식 (GitLab 관례)
+- diff_refs 정보가 없으면 라인 코멘트 불가 → 요약 코멘트만 제공
+- 리뷰 대상은 `Sources/`, `Drivers/`의 `.c/.h` 파일만 (CMSIS, System 제외)
+- 게시 전 반드시 사용자 확인

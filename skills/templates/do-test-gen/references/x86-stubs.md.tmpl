@@ -1,0 +1,365 @@
+# x86 Stub Headers — ARM/CMSIS/MCU Replacement
+
+These stubs replace ARM-specific headers for x86 host compilation.
+Place in `tests/stubs/` with subdirectories matching the original include paths.
+
+## stubs/CMSIS/arm_math.h
+
+Replaces CMSIS DSP Library header. Provides `float32_t`, `arm_status`, and math function stubs.
+
+```c
+/* arm_math.h - x86 test stub
+ * Provides type definitions and minimal API stubs from CMSIS DSP Library.
+ */
+#ifndef _ARM_MATH_H
+#define _ARM_MATH_H
+
+#include <math.h>
+#include <stdint.h>
+#include <string.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Error status */
+typedef enum {
+	ARM_MATH_SUCCESS = 0,
+	ARM_MATH_ARGUMENT_ERROR = -1,
+	ARM_MATH_LENGTH_ERROR = -2,
+	ARM_MATH_SIZE_MISMATCH = -3,
+	ARM_MATH_NANINF = -4,
+	ARM_MATH_SINGULAR = -5,
+	ARM_MATH_TEST_FAILURE = -6
+} arm_status;
+
+/* Fractional data types */
+typedef int8_t q7_t;
+typedef int16_t q15_t;
+typedef int32_t q31_t;
+typedef int64_t q63_t;
+
+/* Floating-point types */
+typedef float float32_t;
+typedef double float64_t;
+
+/* Constants */
+#ifndef PI
+#define PI 3.14159265358979F
+#endif
+
+/* Alignment (no-op on x86) */
+#define ALIGN4
+
+/* clip functions */
+static inline q31_t clip_q63_to_q31(q63_t x) {
+	return ((q31_t)(x >> 32) != ((q31_t)x >> 31))
+		? ((0x7FFFFFFF ^ ((q31_t)(x >> 63))))
+		: (q31_t)x;
+}
+
+static inline q15_t clip_q31_to_q15(q31_t x) {
+	return ((q31_t)(x >> 16) != ((q31_t)x >> 15))
+		? ((0x7FFF ^ ((q15_t)(x >> 31))))
+		: (q15_t)x;
+}
+
+static inline q7_t clip_q31_to_q7(q31_t x) {
+	return ((q31_t)(x >> 8) != ((q31_t)x >> 7))
+		? ((0x7F ^ ((q7_t)(x >> 31))))
+		: (q7_t)x;
+}
+
+/* Trig function stubs → standard math */
+static inline float32_t arm_sin_f32(float32_t x) { return sinf(x); }
+static inline float32_t arm_cos_f32(float32_t x) { return cosf(x); }
+
+/* arm_sqrt_f32 stub */
+static inline arm_status arm_sqrt_f32(float32_t in, float32_t* pOut) {
+	if (in >= 0.0F) {
+		*pOut = sqrtf(in);
+		return ARM_MATH_SUCCESS;
+	}
+	*pOut = 0.0F;
+	return ARM_MATH_ARGUMENT_ERROR;
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _ARM_MATH_H */
+```
+
+## stubs/CMSIS/core_cm4.h
+
+Replaces {{core}} core header. Stubs intrinsics as no-ops or pure C implementations.
+
+```c
+/* core_cm4.h - x86 test stub */
+#ifndef __CORE_CM4_H_GENERIC
+#define __CORE_CM4_H_GENERIC
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Compiler-agnostic defines */
+#ifndef __STATIC_INLINE
+#define __STATIC_INLINE static inline
+#endif
+
+#ifndef __ASM
+#define __ASM
+#endif
+
+#ifndef __INLINE
+#define __INLINE inline
+#endif
+
+/* Core register access stubs (no-op) */
+static inline uint32_t __get_PRIMASK(void) { return 0; }
+static inline void __set_PRIMASK(uint32_t primask) { (void)primask; }
+static inline uint32_t __get_BASEPRI(void) { return 0; }
+static inline void __set_BASEPRI(uint32_t basepri) { (void)basepri; }
+static inline uint32_t __get_xPSR(void) { return 0; }
+
+/* CLZ instruction */
+static inline uint8_t __CLZ(uint32_t value) {
+	uint8_t count = 0;
+	if (value == 0) return 32;
+	while ((value & 0x80000000U) == 0) {
+		value <<= 1;
+		count++;
+	}
+	return count;
+}
+
+/* Reverse bit order */
+static inline uint32_t __RBIT(uint32_t value) {
+	uint32_t result = 0;
+	for (int i = 0; i < 32; i++) {
+		result = (result << 1) | (value & 1);
+		value >>= 1;
+	}
+	return result;
+}
+
+/* Saturation */
+static inline uint32_t __SSAT(int32_t val, uint32_t sat) {
+	int32_t max = (1 << (sat - 1)) - 1;
+	int32_t min = -(1 << (sat - 1));
+	if (val > max) return (uint32_t)max;
+	if (val < min) return (uint32_t)min;
+	return (uint32_t)val;
+}
+
+static inline uint32_t __USAT(int32_t val, uint32_t sat) {
+	uint32_t max = (1U << sat) - 1;
+	if (val < 0) return 0;
+	if ((uint32_t)val > max) return max;
+	return (uint32_t)val;
+}
+
+/* Barrier stubs (no-op) */
+static inline void __DSB(void) {}
+static inline void __ISB(void) {}
+static inline void __DMB(void) {}
+static inline void __NOP(void) {}
+static inline void __WFI(void) {}
+static inline void __WFE(void) {}
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __CORE_CM4_H_GENERIC */
+```
+
+## stubs/CMSIS/core_cmFunc.h
+
+Redirect to core_cm4.h which provides all necessary functions.
+
+```c
+/* core_cmFunc.h - x86 test stub */
+#ifndef __CORE_CMFUNC_H
+#define __CORE_CMFUNC_H
+
+#include "core_cm4.h"
+
+#endif /* __CORE_CMFUNC_H */
+```
+
+## stubs/mcu/{{mcu}}.h
+
+Minimal MCU header stub with clock constants and peripheral register types.
+
+```c
+/* {{mcu}}.h - x86 test stub */
+#ifndef __{{mcu}}_H_STUB
+#define __{{mcu}}_H_STUB
+
+#include <stdint.h>
+
+/* Clock frequency constants */
+#define CPU_CORE_CLK_HZ 50000000UL
+#define CPU_BUS_CLK_HZ  25000000UL
+
+/* NVIC type stub */
+typedef struct {
+	volatile uint32_t ISER[8];
+	uint32_t RESERVED0[24];
+	volatile uint32_t ICER[8];
+	uint32_t RESERVED1[24];
+	volatile uint32_t ISPR[8];
+	uint32_t RESERVED2[24];
+	volatile uint32_t ICPR[8];
+	uint32_t RESERVED3[24];
+	volatile uint32_t IABR[8];
+	uint32_t RESERVED4[56];
+	volatile uint8_t IP[240];
+} NVIC_Type;
+
+/* SCB type stub */
+typedef struct {
+	volatile uint32_t CPUID;
+	volatile uint32_t ICSR;
+	volatile uint32_t VTOR;
+	volatile uint32_t AIRCR;
+	volatile uint32_t SCR;
+	volatile uint32_t CCR;
+	volatile uint8_t SHPR1;
+	volatile uint8_t SHPR2;
+	volatile uint8_t SHPR3;
+	volatile uint32_t SHCSR;
+} SCB_stub_Type;
+
+typedef SCB_stub_Type* SCB_MemMapPtr;
+
+/* Base pointer stubs */
+static NVIC_Type _nvic_stub;
+static SCB_stub_Type _scb_stub;
+
+#define NVIC_BASE_PTR (&_nvic_stub)
+#define SCB_BASE_PTRS (&_scb_stub)
+
+/* Register access macros */
+#define NVIC_ISER_REG(base, index) ((base)->ISER[index])
+#define NVIC_ICER_REG(base, index) ((base)->ICER[index])
+#define NVIC_ISPR_REG(base, index) ((base)->ISPR[index])
+#define NVIC_ICPR_REG(base, index) ((base)->ICPR[index])
+#define NVIC_IP_REG(base, index)   ((base)->IP[index])
+#define NVIC_STIR_REG(base, index) 0
+
+#endif /* __{{mcu}}_H_STUB */
+```
+
+## stubs/mcu/define.h
+
+Replaces the main project `define.h`. Converts all ARM intrinsics and inline ASM to no-ops.
+
+```c
+/* define.h - x86 test stub
+ * Strips ARM intrinsics, inline asm, and MCU register access.
+ * Preserves macros/types used by application logic.
+ */
+#ifndef __DEFINE_H__
+#define __DEFINE_H__
+
+#include <stdint.h>
+
+#include "arm_math.h"
+#include "data_types.h"
+
+/* Clock variables */
+extern unsigned long long __system_clock;
+extern unsigned long long __bus_clock;
+extern unsigned long long __sec_tick;
+extern unsigned long long __msec_tick;
+extern unsigned long long __usec_tick;
+
+#define SET_CLOCK_TO_COMPONENTS {}
+#define SET_CLOCK_TO_COMPONENTS_BY_CONFIG(config_number) {}
+#define SET_CLOCK_TO_COMPONENTS_DIRECTLY(system_clock, bus_clock) {}
+
+#define SYSTEM_CLOCK __system_clock
+#define BUS_CLOCK __bus_clock
+#define SEC_TICK __sec_tick
+#define MSEC_TICK __msec_tick
+#define USEC_TICK __usec_tick
+
+/* Interrupt control (no-op) */
+#define ENABLE_INTERRUPTS
+#define DISABLE_INTERRUPTS
+#define ENABLE_FAULT_INTERRUPTS
+#define DISABLE_FAULT_INTERRUPTS
+
+/* Critical section (no-op) */
+#define CRITICAL_SECTION_START {
+#define CRITICAL_SECTION_END }
+
+/* NVIC (no-op) */
+#define irq_num(irq_number) (int16_t)((irq_number) - 16)
+#define ipr_value(irq_number) (uint16_t)(irq_num(irq_number) >> 5)
+#define ipr_shift(irq_number) (uint16_t)(irq_num(irq_number) & 0x1F)
+
+#define nvic_enable(irq_number)
+#define nvic_disable(irq_number)
+#define nvic_get_pending_irq(irq_number) 0
+#define nvic_set_pending_irq(irq_number)
+#define nvic_clear_pending_irq(irq_number)
+#define nvic_set_priority(irq_number, priority)
+#define nvic_get_priority(irq_number) 0
+#define nvic_set_priority_and_enable(irq_number, priority)
+
+/* ISR declaration (no-op) */
+#if !defined(PE_ISR)
+#define PE_ISR(ISR_name) void ISR_name(void)
+#endif
+
+#define INTERRUPT_CALL(vector, callback, arg) \
+	PE_ISR(vector) { callback(arg); }
+
+/* Thread level check (no-op) */
+#define IS_HIGHER_LEVEL(level) 0
+#define THREAD_LEVEL_CHECK 0
+
+/* Protection (no-op) */
+#define PRIORITY_LEVEL_BITS 4
+#define PRIORITY_LEVEL_SHIFT (8 - PRIORITY_LEVEL_BITS)
+
+#define protect_start(level) {
+#define protect_level(level)
+#define unprotect_level(level)
+#define unprotect }
+#define protect_end }
+#define protect_level_noguard(level)
+
+#define PROTECT_LEVEL_CHANGE_BARRIER
+
+#define priority_shift(priority) (unsigned char)((unsigned char)(priority) << PRIORITY_LEVEL_SHIFT)
+
+#define try_until_success(job, retry_number, recover) ({ int32_t error = job; error; })
+
+#define UNUSED(x) ((void)(x))
+
+#ifdef __GNUC__
+#define UNUSED_PARAM __attribute__((unused))
+#else
+#define UNUSED_PARAM
+#endif
+
+#endif /* __DEFINE_H__ */
+```
+
+## Adding New Stubs
+
+When a module includes a new ARM-specific header not yet stubbed:
+1. Check which types/macros/functions the application code actually uses
+2. Create a minimal stub providing only those definitions
+3. Place in the appropriate subdirectory (`stubs/CMSIS/` or `stubs/mcu/`)
+4. Ensure the include guard matches the original header
+
+Do NOT copy the entire original header — only stub what is actually referenced.

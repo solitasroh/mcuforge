@@ -1,0 +1,202 @@
+# Bootstrap Template — Test Infrastructure Setup
+
+When `tests/` directory does not exist, create this structure before generating any test code.
+
+## Directory Structure
+
+```
+tests/
+├── CMakeLists.txt          # Main test build file
+├── CMakePresets.json        # Test configure/build/test presets
+├── unit/                    # Test source files
+│   └── test_<module>.c
+├── fakes/                   # fff fake headers
+│   └── fake_<driver>.h
+├── stubs/                   # x86 stub sources (.c files for link-time substitution)
+│   ├── CMSIS/               # ARM CMSIS header stubs
+│   │   ├── arm_math.h
+│   │   ├── core_cm4.h
+│   │   └── core_cmFunc.h
+│   └── mcu/                 # MCU-specific header stubs
+│       ├── {{mcu}}.h
+│       └── define.h
+└── support/                 # Test-only support headers and configs
+    └── test_config.h
+```
+
+## tests/CMakePresets.json
+
+```json
+{
+  "version": 7,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "Test",
+      "displayName": "Host Unit Test (x86)",
+      "description": "Host PC unit test build using Unity + fff",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-test",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "Test",
+      "displayName": "Build Tests",
+      "description": "Build all unit tests",
+      "configurePreset": "Test",
+      "jobs": 0
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "Test",
+      "displayName": "Run Tests",
+      "description": "Run all unit tests with JUnit XML output",
+      "configurePreset": "Test",
+      "output": {
+        "outputOnFailure": true,
+        "outputJUnitFile": "test-results.xml"
+      }
+    }
+  ]
+}
+```
+
+## tests/CMakeLists.txt Template
+
+```cmake
+# ==============================================================================
+# Host Unit Test Build (x86) - Unity + fff
+# ==============================================================================
+#
+# Usage:
+#   cd tests
+#   cmake --preset Test
+#   cmake --build --preset Test
+#   ctest --preset Test
+#
+cmake_minimum_required(VERSION 3.25)
+project({{project_name}}_tests C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_compile_options(-Wall -Wextra -Wpedantic)
+
+# ==============================================================================
+# External Dependencies: Unity + fff
+# ==============================================================================
+include(FetchContent)
+
+FetchContent_Declare(
+    unity
+    GIT_REPOSITORY https://github.com/ThrowTheSwitch/Unity.git
+    GIT_TAG        v2.6.0
+)
+FetchContent_MakeAvailable(unity)
+
+FetchContent_Declare(
+    fff
+    GIT_REPOSITORY https://github.com/meekrosoft/fff.git
+    GIT_TAG        v1.1
+)
+FetchContent_MakeAvailable(fff)
+
+# Unity library target
+add_library(unity_lib STATIC
+    ${unity_SOURCE_DIR}/src/unity.c
+)
+target_include_directories(unity_lib PUBLIC
+    ${unity_SOURCE_DIR}/src
+)
+
+# fff is header-only
+add_library(fff INTERFACE)
+target_include_directories(fff INTERFACE
+    ${fff_SOURCE_DIR}
+)
+
+# ==============================================================================
+# Common paths
+# ==============================================================================
+set(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
+set(SOURCES_DIR "${PROJECT_ROOT}/Sources")
+set(COMPONENTS_DIR "${PROJECT_ROOT}/Components")
+set(INCLUDE_DIR "${PROJECT_ROOT}/include")
+set(DRIVERS_DIR "${PROJECT_ROOT}/Drivers")
+set(TEST_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+
+# ==============================================================================
+# Test target: <module>
+# ==============================================================================
+# For Include-the-Source pattern (static function testing):
+#   - Do NOT add the source .c to add_executable()
+#   - The test file #includes the .c directly
+#
+# For public-only testing:
+#   - Add the source .c to add_executable()
+#   - The test file #includes the .h only
+
+add_executable(test_<module>
+    ${TEST_DIR}/unit/test_<module>.c
+    # ${SOURCES_DIR}/<module>.c    # Only if NOT using Include-the-Source
+)
+target_include_directories(test_<module> PRIVATE
+    ${TEST_DIR}/stubs/CMSIS     # x86 ARM stubs (highest priority)
+    ${TEST_DIR}/stubs/mcu       # x86 MCU stubs
+    ${TEST_DIR}/support         # test support headers
+    ${TEST_DIR}/fakes           # fff fake headers
+    ${SOURCES_DIR}
+    ${COMPONENTS_DIR}
+    ${INCLUDE_DIR}
+    ${DRIVERS_DIR}
+)
+target_compile_definitions(test_<module> PRIVATE
+    UNIT_TEST=1
+    {{mcu}}=1                   # define.h MCU selection
+)
+target_link_libraries(test_<module> PRIVATE
+    unity_lib
+    fff
+    m                          # libm for math functions
+)
+
+# ==============================================================================
+# CTest registration
+# ==============================================================================
+enable_testing()
+add_test(NAME test_<module> COMMAND test_<module>)
+```
+
+## Include Path Priority (Critical)
+
+The order of `target_include_directories` determines which header wins when multiple directories contain the same filename:
+
+```
+1. stubs/CMSIS/     → arm_math.h, core_cm4.h shadows real CMSIS
+2. stubs/mcu/       → define.h, {{mcu}}.h shadows real MCU headers
+3. support/         → test_config.h, any test-only overrides
+4. fakes/           → fake_hv.h, fake_log.h (fff fakes)
+5. Sources/         → application headers (calibration.h, measure.h)
+6. Components/      → component headers
+7. include/         → project-wide headers
+8. Drivers/         → driver headers (types only, functions faked)
+```
+
+## Build & Run
+
+```bash
+cd tests
+cmake --preset Test        # Configure
+cmake --build --preset Test # Build
+ctest --preset Test         # Run + JUnit XML output
+```

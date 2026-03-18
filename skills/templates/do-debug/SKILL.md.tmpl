@@ -1,0 +1,151 @@
+---
+name: do-debug
+description: "Guides systematic 4-step debugging: Investigate, Analyze, Hypothesize, Fix. When user describes runtime symptoms, this skill provides a structured framework rather than ad-hoc code reading. ALWAYS use this skill when the user mentions: 디버깅, debug, 버그, bug, 간헐적 이슈, intermittent, HardFault, CFSR, 측정 오차, measurement drift, 드리프트, drift, 통신 멈춤, UART hang, DMA 인터럽트, 데드락, deadlock, 타이밍 이슈, timing issue, 캘리브레이션 오류, 비정상 값, abnormal value, INFINITY, 원인 분석, root cause, 분석 필요, 분석해줘, 증상, symptom, 이전 값 반환, stale value, 반응 안 함, no response, 동기화 이슈, sync issue, or describes a runtime bug with symptoms (INFINITY, drift, hang, crash, incorrect values, stale data, slow response). Also trigger when user describes intermittent measurement errors, communication failures, timing problems, or asks to analyze why something behaves unexpectedly at runtime. Do NOT use for build errors, simple typos, or compile-time issues."
+argument-hint: "<bug description> [--mcu=hardfault|measurement|comm|interrupt] [--c=segfault|memory|logic|boundary] [--pdca]"
+user-invokable: true
+agent: systematic-debugger
+---
+
+# Systematic Debugging
+
+Apply a rigorous 4-step debugging methodology to find root causes of complex bugs.
+
+## Framework
+
+### Step 1: Investigate (Evidence Collection)
+- Clarify reproduction conditions
+- Collect relevant logs, state variables, error messages
+- Determine timeline: when did this first appear? (`git bisect`)
+- Scope: single module or cross-module?
+
+### Step 2: Analyze (Scope Narrowing)
+- Trace call chains backward (callee → caller)
+- Trace data flow forward (input → transformation → output)
+- Check change history (`git log --follow`)
+- Eliminate working paths to narrow suspects
+
+### Step 3: Hypothesize (Root Cause Theory)
+- Form 1-3 root cause hypotheses
+- For each: predict behavior, identify confirming/refuting evidence
+- Describe test method
+
+### Step 4: Fix (Minimal Change)
+- Propose smallest change testing the hypothesis
+- Verify no side effects on other paths
+- Identify regression prevention points
+
+## When to Use
+- Complex bugs spanning multiple modules
+- Intermittent or timing-dependent issues
+- Bugs that resist simple inspection
+- Issues where the obvious fix didn't work
+
+## MCU Scenarios
+
+Use `--mcu=<scenario>` to apply MCU-specific debugging on {{mcu}} {{core}}.
+
+### HardFault
+1. Get PC (Program Counter) and LR (Link Register) values
+2. Check CFSR (Configurable Fault Status Register)
+3. Determine fault type: BusFault (precise/imprecise), UsageFault, MemManage
+4. Common causes:
+   - Stack overflow (SP below stack limit)
+   - Unaligned access (LDM/STM/LDRD/STRD)
+   - Invalid instruction (PC in non-executable memory)
+   - Null pointer dereference
+
+### Measurement Accuracy
+1. Check ADC calibration status
+2. Verify DMA buffer integrity (alignment, overflow)
+3. Trace data flow: ADC → average → calibration → resistance
+4. Check calibration table values
+5. Verify temperature compensation parameters
+
+### Communication Failure
+1. Check UART clock and baud rate configuration
+2. Verify pin mux (TX/RX pins)
+3. Check for buffer overflow in ring buffer
+4. Verify interrupt priority (UART vs other ISRs)
+5. Check for framing/parity errors
+
+### Interrupt Issues
+1. Verify interrupt is enabled in NVIC
+2. Check interrupt priority conflicts
+3. Verify ISR handler is registered in vector table
+4. Check for missing interrupt flag clear
+5. Verify shared variable protection (volatile, critical section)
+
+## General C Scenarios
+
+Use `--c=<scenario>` for non-MCU C debugging on host PC or general C projects.
+
+### Segfault (`--c=segfault`)
+1. Get crash address + backtrace (from core dump or debugger)
+2. Trace pointer allocation chain backward to find where NULL/invalid pointer was introduced
+3. Check for: NULL dereference, use-after-free, stack overflow, buffer overrun
+4. Common causes:
+   - Pointer not initialized before use
+   - Freed memory accessed later
+   - Array index out of bounds corrupting stack/heap
+   - String without null terminator
+
+### Memory (`--c=memory`)
+1. Analyze valgrind/ASan output (host builds)
+2. Categorize: leak (definitely lost, possibly lost), invalid read/write, use of uninitialized
+3. Trace allocation site → expected free site → actual code path
+4. Common causes:
+   - Error path skips `free()`
+   - Reallocated pointer not updated in all references
+   - Container grows but never shrinks
+
+### Logic (`--c=logic`)
+1. Compare expected behavior (from spec or test) with actual behavior
+2. Trace state machine transitions: expected vs actual sequence
+3. Check condition branches: are predicates correct? Off-by-one in comparisons?
+4. Common causes:
+   - Wrong operator (`<` vs `<=`, `&&` vs `||`)
+   - State machine missing transition or wrong guard condition
+   - Integer promotion/truncation changing comparison result
+
+### Boundary (`--c=boundary`)
+1. Identify boundary values: array limits, integer overflow points, buffer sizes
+2. Test exact boundary, boundary-1, boundary+1
+3. Check loop termination conditions
+4. Common causes:
+   - Off-by-one in loop (`< n` vs `<= n`)
+   - Array index equal to array size
+   - Counter overflow wrapping to 0 silently
+   - Signed/unsigned comparison at negative boundary
+
+## PDCA Cycle
+
+Use `--pdca` to apply Plan-Do-Check-Act iterative improvement for complex problems.
+
+### Plan
+1. Define problem clearly (symptoms, scope, impact)
+2. Analyze root cause candidates (5-Why or fishbone)
+3. Form hypothesis: "If we change X, then Y because Z"
+4. Define measurable success criteria
+5. Identify risks and rollback plan
+
+### Do
+1. Implement minimum change to test hypothesis
+2. Keep changes isolated and reversible
+3. Document exactly what was changed and why
+
+### Check
+1. Verify against success criteria
+2. Run tests / build / measure
+3. Compare before vs after
+4. Check for side effects
+
+### Act
+1. If successful: document fix and root cause
+2. If partial: refine hypothesis, next cycle
+3. If failed: revert, update understanding
+4. Document learnings
+
+### PDCA Rules
+- Maximum 3 cycles per session
+- Each cycle must show measurable progress
+- If no progress after 2 cycles, escalate to broader investigation

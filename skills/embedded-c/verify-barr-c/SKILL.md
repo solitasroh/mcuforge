@@ -1,6 +1,6 @@
 ---
 name: verify-barr-c
-description: "Enforces BARR-C:2018 high-priority coding rules: braces on all if/for/while, no goto/auto/register, no assignment in conditions, switch requires default, no float equality. Use proactively when modifying .c/.h files in Sources/ or Drivers/. Do NOT use for CMSIS vendor headers or System/ startup code."
+description: "Enforces BARR-C:2018 high-priority coding rules: braces on all if/for/while, no goto/auto/register, no assignment in conditions, switch requires default, no float equality. ALWAYS use when user asks about: goto 검사, goto 사용, goto 찾기, 조건문 대입 검사, 조건문 안에 대입, 중괄호 검사, 중괄호 빠진 곳, braces 검사, switch default 검사, switch default 빠진 곳, float == 비교, float 동등 비교, auto 키워드, register 키워드, BARR-C, BARR-C 규칙, 코딩 규칙 위반 검사. Use proactively when modifying .c/.h files in Sources/ or Drivers/. Do NOT use for CMSIS vendor headers or System/ startup code."
 user-invokable: false
 ---
 
@@ -15,12 +15,14 @@ Enforces high-priority BARR-C:2018 rules that prevent common embedded bugs:
 3. **Rule 8.2b** - No assignment inside conditions
 4. **Rule 8.3** - Every `switch` must have a `default` case
 5. **Rule 5.4** - No float/double equality comparison (`==`, `!=`)
+6. **NULL Guard** - Public functions with pointer params must check NULL at entry
+7. **Rule 8.3+** - Enum switch must have explicit `case` for every enum value
 
 ## When to Run
 
 - After modifying `.c` or `.h` files in Sources/ or Drivers/
 - Before PR to ensure BARR-C compliance
-- When verify-implementation orchestrates verification
+- When check-verify orchestrates verification
 
 ## Related Files
 
@@ -153,6 +155,89 @@ if (fabsf(voltage) < 1e-9F)
 if (voltage < 1e-9F && voltage > -1e-9F)
 ```
 
+### Check 6: NULL Pointer Guard
+
+Detect non-static functions with pointer parameters that lack NULL checks near the function entry.
+
+**Tool**: Read + Grep
+**Strategy**:
+1. Find non-static functions with pointer parameters: `^[a-z].*\*\s*\w+\)` in `.c` files
+2. For each match, read the first 10 lines of the function body
+3. Check for `if (ptr == NULL)`, `if (!ptr)`, `if (NULL == ptr)`, or assert-style NULL check
+
+**Pattern**: Function signature with `type* param` → body first 10 lines must contain NULL check for each pointer param
+
+**PASS**: All pointer parameters have NULL guard within first 10 lines of function body
+**FAIL**: Pointer parameter used without NULL check
+
+**Remediation**:
+```c
+// Before (violation)
+void process_data(uint8_t* buffer, uint32_t size)
+{
+    buffer[0] = 0;  // potential NULL dereference
+}
+
+// After (compliant)
+void process_data(uint8_t* buffer, uint32_t size)
+{
+    if (buffer == NULL)
+    {
+        return;
+    }
+    buffer[0] = 0;
+}
+```
+
+**Scope**: Non-static (public) functions only. Static (file-local) functions are exempt because callers are in the same file and can be verified locally.
+
+### Check 7: Enum Switch Completeness (Rule 8.3+)
+
+Detect `switch` statements on enum-typed variables where not all enum values have explicit `case` labels.
+
+**Tool**: Read + Grep
+**Strategy**:
+1. Find `switch` blocks: `switch\s*\(` in `.c` files
+2. Identify the switched variable's type (trace back to declaration or parameter)
+3. If the type is an enum, collect all enum values from the enum definition
+4. Compare enum values against `case` labels in the switch block
+5. Flag any enum value without a corresponding `case` (even if `default:` exists)
+
+**PASS**: All enum values have explicit `case` labels in the switch
+**FAIL**: One or more enum values lack a `case` label and rely solely on `default:`
+
+**Remediation**:
+```c
+// Before (violation) — STATE_ERROR not handled explicitly
+typedef enum { STATE_IDLE, STATE_RUN, STATE_ERROR } state_t;
+
+switch (state)
+{
+    case STATE_IDLE:
+        break;
+    case STATE_RUN:
+        break;
+    default:
+        break;
+}
+
+// After (compliant) — all values explicit
+switch (state)
+{
+    case STATE_IDLE:
+        break;
+    case STATE_RUN:
+        break;
+    case STATE_ERROR:
+        handle_error();
+        break;
+    default:
+        break;
+}
+```
+
+**Note**: `default:` is still required (Check 4), but it should be a safety net, not a substitute for explicit handling.
+
 ## Output Format
 
 ```markdown
@@ -165,6 +250,8 @@ if (voltage < 1e-9F && voltage > -1e-9F)
 | 3 | 8.2b | No assignment in conditions | PASS/FAIL | N |
 | 4 | 8.3 | Switch requires default | PASS/FAIL | N |
 | 5 | 5.4 | No float equality | PASS/FAIL | N |
+| 6 | — | NULL pointer guard | PASS/FAIL | N |
+| 7 | 8.3+ | Enum switch completeness | PASS/FAIL | N |
 
 ### Issues Found
 
