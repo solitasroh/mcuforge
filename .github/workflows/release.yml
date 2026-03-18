@@ -71,6 +71,22 @@ jobs:
           name: mcuforge-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/${{ matrix.artifact }}
 
+      # Windows MSI installer
+      - name: Install cargo-wix
+        if: matrix.os == 'windows-latest'
+        run: cargo install cargo-wix
+
+      - name: Build MSI installer
+        if: matrix.os == 'windows-latest'
+        run: cargo wix --nocapture
+
+      - name: Upload MSI
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcuforge-msi
+          path: target/wix/*.msi
+
   release:
     needs: [build-skills, build-binary]
     runs-on: ubuntu-latest
@@ -87,6 +103,7 @@ jobs:
           cp artifacts/claude-skills/*.tar.gz release-assets/
           cp artifacts/mcuforge-x86_64-pc-windows-msvc/mcuforge.exe release-assets/mcuforge-windows-x86_64.exe
           cp artifacts/mcuforge-x86_64-unknown-linux-gnu/mcuforge release-assets/mcuforge-linux-x86_64
+          cp artifacts/mcuforge-msi/*.msi release-assets/
           chmod +x release-assets/mcuforge-linux-x86_64
           ls -la release-assets/
 
