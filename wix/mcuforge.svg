@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- 배경 그라디언트 -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <!-- 큐브 상단면 그라디언트 -->
+    <linearGradient id="cubeTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#a29bfe"/>
+      <stop offset="100%" style="stop-color:#6c5ce7"/>
+    </linearGradient>
+    <!-- 큐브 좌측면 그라디언트 -->
+    <linearGradient id="cubeLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6c5ce7"/>
+      <stop offset="100%" style="stop-color:#4834d4"/>
+    </linearGradient>
+    <!-- 큐브 우측면 그라디언트 -->
+    <linearGradient id="cubeRight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0984e3"/>
+      <stop offset="100%" style="stop-color:#0652DD"/>
+    </linearGradient>
+    <!-- 회로 트레이스 글로우 -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glowStrong">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- 배경: 둥근 모서리 사각형 -->
+  <rect x="16" y="16" width="480" height="480" rx="64" ry="64" fill="url(#bgGrad)"/>
+
+  <!-- 아이소메트릭 큐브 (중앙, 약간 왼쪽 위) -->
+  <!-- 큐브 중심: 240, 230 / 큐브 크기: 약 160px -->
+
+  <!-- 큐브 좌측면 -->
+  <polygon points="240,230 240,350 148,295 148,175" fill="url(#cubeLeft)" opacity="0.95"/>
+
+  <!-- 큐브 우측면 -->
+  <polygon points="240,230 240,350 332,295 332,175" fill="url(#cubeRight)" opacity="0.95"/>
+
+  <!-- 큐브 상단면 -->
+  <polygon points="240,110 332,175 240,230 148,175" fill="url(#cubeTop)" opacity="0.95"/>
+
+  <!-- 큐브 엣지 하이라이트 -->
+  <line x1="240" y1="110" x2="240" y2="230" stroke="#a29bfe" stroke-width="1.5" opacity="0.6"/>
+  <line x1="240" y1="230" x2="148" y2="175" stroke="#a29bfe" stroke-width="1" opacity="0.3"/>
+  <line x1="240" y1="230" x2="332" y2="175" stroke="#74b9ff" stroke-width="1" opacity="0.3"/>
+
+  <!-- 큐브 상단면 회로 노드 -->
+  <circle cx="220" cy="170" r="4" fill="#00cec9" opacity="0.9" filter="url(#glow)"/>
+  <circle cx="260" cy="185" r="3" fill="#00cec9" opacity="0.7" filter="url(#glow)"/>
+  <!-- 상단면 미니 트레이스 -->
+  <line x1="220" y1="170" x2="260" y2="185" stroke="#00cec9" stroke-width="1.5" opacity="0.6"/>
+
+  <!-- 회로 트레이스 1: 큐브 우측면에서 우하단으로 발산 -->
+  <g filter="url(#glow)">
+    <polyline points="332,230 365,250 365,310 395,330"
+      fill="none" stroke="#00cec9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+    <circle cx="395" cy="330" r="5" fill="#00cec9" opacity="0.9"/>
+  </g>
+
+  <!-- 회로 트레이스 2: 큐브 우측면에서 오른쪽으로 발산 -->
+  <g filter="url(#glow)">
+    <polyline points="332,200 370,220 420,220"
+      fill="none" stroke="#00cec9" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+    <circle cx="420" cy="220" r="4" fill="#00cec9" opacity="0.7"/>
+  </g>
+
+  <!-- 회로 트레이스 3: 큐브 하단에서 아래로 발산 -->
+  <g filter="url(#glow)">
+    <polyline points="240,350 240,390 280,410 280,440"
+      fill="none" stroke="#00cec9" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+    <circle cx="280" cy="440" r="4" fill="#00cec9" opacity="0.8"/>
+  </g>
+
+  <!-- 회로 트레이스 4: 큐브 좌측에서 좌하단으로 발산 -->
+  <g filter="url(#glow)">
+    <polyline points="148,240 115,260 115,330"
+      fill="none" stroke="#74b9ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+    <circle cx="115" cy="330" r="3.5" fill="#74b9ff" opacity="0.5"/>
+  </g>
+
+  <!-- 회로 트레이스 5: 큐브 상단에서 우상단으로 발산 -->
+  <g filter="url(#glow)">
+    <polyline points="290,140 340,115 390,115"
+      fill="none" stroke="#74b9ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+    <circle cx="390" cy="115" r="3" fill="#74b9ff" opacity="0.4"/>
+  </g>
+
+</svg>
