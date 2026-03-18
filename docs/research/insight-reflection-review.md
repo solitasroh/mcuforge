@@ -3,6 +3,7 @@
 > 검토일: 2026-03-18
 > 대상: `insight-gap-analysis.md`의 10개 인사이트 → 실제 skills/ 구현체 대조
 > 범위: 29 skills, 12 agents, 18 hooks, manifest.json, settings.json.tmpl
+> **확장 검토**: Embedded Linux App / WPF(.NET) App 도메인 포함 분석 (2026-03-18 추가)
 
 ---
 
@@ -22,6 +23,25 @@
 | 10 | stdlib-only Python 스크립트 | **NONE** | Python 1개(op.py)만 존재 |
 
 **결과: FULL 0개 / PARTIAL 5개 / NONE 5개**
+
+### 멀티 도메인 확장 시 인사이트 영향도
+
+> Embedded Linux App, WPF(.NET) App 도메인 추가 시 각 인사이트의 긴급도 재평가
+
+| # | 인사이트 | Embedded Linux 영향 | WPF/.NET 영향 | 확장 긴급도 |
+|---|---------|-------------------|--------------|:---------:|
+| 1 | 강제 워크플로우 | **HIGH** — 크로스컴파일→타겟배포→원격디버깅 순서 강제 | **HIGH** — MVVM 설계→ViewModel→View 순서 강제 | ★★★ |
+| 2 | dot 플로우차트 | MEDIUM — Yocto 빌드 파이프라인 복잡 | LOW — MVVM 패턴 선형적 | ★★ |
+| 3 | 독립 리뷰어 | **HIGH** — 커널/유저 경계, IPC, 보안, fd 누수, 크로스컴파일 호환성 각각 독립 리뷰 | **HIGH** — MVVM 준수, 바인딩 안전성, 메모리 누수, UI 스레드 | ★★★ |
+| 4 | 중복 탐지 | **HIGH** — 드라이버/HAL 유사 패턴 산재 | MEDIUM — XAML Style/Template 중복 | ★★ |
+| 5 | 계산 스킬 | MEDIUM — 성능 프로파일링 계산 | LOW — UI 도메인, 계산 불필요 | ★ |
+| 6 | 토큰 예산 | **CRITICAL** — 3개 도메인 동시 로드 시 예산 폭발 (~5,500줄) | **CRITICAL** | ★★★ |
+| 7 | 역할별 번들 | **CRITICAL** — Linux 개발자에게 MCU hooks 불필요 | **CRITICAL** — WPF 개발자에게 float-suffix hook 불필요 | ★★★ |
+| 8 | 문서 그룹 참조 | **HIGH** — DTS + 커널 드라이버 + sysfs + udev 동시 참조 | MEDIUM — MSDN + NuGet + XAML 참조 | ★★ |
+| 9 | 부트스트랩 제한 | **CRITICAL** — CLAUDE.md가 도메인별로 달라야 함 | **CRITICAL** | ★★★ |
+| 10 | stdlib 스크립트 | **HIGH** — bitbake 로그, DTB 분석, rootfs 사이즈 스크립트 | MEDIUM — .csproj 분석 스크립트 | ★★ |
+
+**핵심 발견: #6 토큰 예산, #7 번들, #9 부트스트랩이 멀티 도메인 확장의 전제 조건 (★★★)**
 
 ---
 
@@ -50,6 +70,11 @@
 - `skills/settings.json.tmpl` — hooks 정의 (규칙 강제만)
 - `skills/universal/check-verify/SKILL.md` — verify-* 순차 실행 (규칙 검증만)
 
+**멀티 도메인 확장 영향 (★★★):**
+- **Embedded Linux**: 크로스컴파일→scp 타겟배포→원격 GDB→로그 수집 순서 강제 필요. "빌드 없이 배포 금지" hook 필수
+- **WPF**: MVVM 설계(ViewModel 정의)→바인딩 테스트→View XAML 작성 순서 강제. "ViewModel 없이 코드비하인드에 로직 금지"
+- **공통**: 도메인별 워크플로우 DAG가 다르므로 워크플로우 정의를 도메인별 SKILL.md로 분리 필요
+
 ---
 
 ### 2. GraphViz dot 표기 — NONE
@@ -68,6 +93,10 @@
 **영향:**
 - 리서치(v3)에서 "Claude는 산문보다 dot 플로우차트를 더 정확하게 따른다"고 확인했으나 미적용
 - 특히 `check-code-review`(142줄)와 `do-debug`(152줄)처럼 조건부 분기가 많은 스킬에서 효과적
+
+**멀티 도메인 확장 영향 (★★):**
+- **Embedded Linux**: Yocto 빌드 파이프라인(bitbake→do_fetch→do_compile→do_install→image), systemd 서비스 의존성 그래프 → dot 표현이 매우 유리
+- **WPF**: MVVM 바인딩 흐름(View↔ViewModel↔Model), DI 컨테이너 해석 순서 → 상대적으로 선형이라 dot 필요성 낮음
 
 ---
 
@@ -101,6 +130,11 @@
 - `skills/embedded-c/check-code-review/SKILL.md:20-26` — 4개 카테고리, 단일 워크플로우
 - `skills/agents/embedded-reviewer.md:29-89` — 4개 렌즈, 1회 실행
 
+**멀티 도메인 확장 영향 (★★★):**
+- **Embedded Linux**: 최소 5종 독립 리뷰 필요 — ① 커널/유저 경계 안전성, ② IPC 프로토콜 일관성(D-Bus/socket), ③ 보안(SELinux, 권한 상승), ④ 리소스 누수(fd, mmap), ⑤ 크로스컴파일 호환성
+- **WPF**: 최소 4종 — ① MVVM 패턴 준수, ② 바인딩 안전성(INotifyPropertyChanged, ICommand), ③ 메모리 누수(이벤트 핸들러 해제), ④ UI 스레드 안전성(Dispatcher)
+- **공통**: git 히스토리 기반 리뷰는 모든 도메인에서 유용 → `universal/` 스킬로 승격 검토
+
 ---
 
 ### 4. Semantic Duplicate Finder — NONE
@@ -117,6 +151,11 @@
 **비고:**
 - MCU 프로젝트에서 여러 제품의 유사 주변장치 초기화 코드 중복은 실제 문제
 - 현재 이를 잡아내는 자동화된 메커니즘 없음
+
+**멀티 도메인 확장 영향 (★★):**
+- **Embedded Linux**: HAL 래퍼 중복(동일 센서의 sysfs/i2c-dev/ioctl 구현이 제품별 산재) → HIGH
+- **WPF**: XAML Style/Template 중복, 유사 ViewModel 중복 → MEDIUM
+- **공통**: 의도 기반 중복 탐지는 도메인 무관 → `universal/` 스킬로 제작 적합
 
 ---
 
@@ -136,6 +175,11 @@
 **비고:**
 - Accura 2750IRM 같은 정밀 측정 장비 개발에서 결정적 가치
 - "설명만 하지 말고, 계산도 해라"는 K-Dense 철학 미적용
+
+**멀티 도메인 확장 영향 (★):**
+- **Embedded Linux**: 성능 프로파일링 계산(CPU affinity, IRQ affinity, latency histogram), 전력 소비 분석 → MEDIUM
+- **WPF**: UI 도메인이라 공학 계산 불필요 → LOW
+- 이 인사이트는 **embedded-c 전용 유지** 가능 (universal 승격 불필요)
 
 ---
 
@@ -169,6 +213,12 @@
   - 개발자가 새 스킬 작성 시 참고할 가이드 없음
 - CLAUDE.md가 없어서 "상시 로드 ~1,000토큰" 기준 자체가 없음
 
+**멀티 도메인 확장 영향 (★★★ CRITICAL):**
+- 현재 단일 도메인(embedded-c) 14 skills × ~130줄 = ~1,820줄 → 관리 가능
+- 3개 도메인 시: (6 universal + 14 embedded-c + ~12 embedded-linux + ~10 wpf) × ~130줄 = **~5,500줄**
+- **모두 동시 로드하면 토큰 예산 초과** → 도메인별 선택적 로딩이 필수
+- `ClaudeSkillsConfig.overrides` (HashMap<String, toml::Value>) 확장 가능하나 공식 가이드라인 선행 필요
+
 ---
 
 ### 7. 역할별 번들 전략 — NONE
@@ -188,6 +238,28 @@
 **비고:**
 - 현재 29개 스킬 전부가 모든 사용자에게 노출되는 구조
 - 팀 확장 시 (10명→50명) 역할 분화에 대응 불가
+
+**멀티 도메인 확장 영향 (★★★ CRITICAL):**
+3개 도메인 추가 시 manifest.json은 **~50+ skills**로 확장. 번들 없이는:
+- **MCU 펌웨어 개발자**가 WPF hooks(`check-mvvm-pattern.sh`)에 blocking 당함
+- **WPF 개발자**가 `verify-float-suffix` hook에 불필요하게 차단됨
+- Hooks가 **도메인 무관 전부 로드**되는 `settings.json.tmpl` 구조의 근본적 한계
+
+필요한 번들 구조 예시:
+```json
+"bundles": {
+  "firmware-dev":       ["universal", "embedded-c", "templates/ref-hardware"],
+  "embedded-linux-dev": ["universal", "embedded-linux", "templates/ref-linux-bsp"],
+  "wpf-dev":            ["universal", "wpf-dotnet", "templates/ref-wpf-patterns"],
+  "fullstack-embedded": ["universal", "embedded-c", "embedded-linux"],
+  "onboarding":         ["universal", "ref-karpathy", "ref-coding-rules"]
+}
+```
+
+Rust 코드 영향:
+- `src/core/project.rs:40-45` — `ClaudeSkillsConfig`에 `bundle: Option<String>` 추가
+- `src/core/claude.rs:146-164` — `install_skills()`가 번들 기반 도메인 선택
+- `src/core/project.rs:104` — `project_type` 미사용 필드 → 번들 자동 선택에 활용
 
 ---
 
@@ -214,6 +286,11 @@
 - `skills/templates/ref-hardware/SKILL.md.tmpl:59-62` — 단순 SVD/CMSIS 참조만
 - `skills/agents/embedded-reviewer.md:3-6` — ref-coding-rules, ref-architecture, ref-hardware 동시 참조 (유일한 그룹 참조 사례)
 
+**멀티 도메인 확장 영향 (★★):**
+- **Embedded Linux**: Device Tree(.dts) + 커널 드라이버 + sysfs + udev rules를 동시 참조해야 하는 시나리오 빈번 → 문서 그룹 참조 패턴 필수
+- **WPF**: MSDN + NuGet 패키지 + XAML 패턴 레퍼런스 동시 참조 → `ref-wpf-patterns/references/` 하위에 다중 문서 구조화
+- 현재 `ref-hardware`의 2파일 패턴을 **일반화**하여 `ref-linux-bsp/references/`, `ref-wpf-patterns/references/`에도 적용
+
 ---
 
 ### 9. 2,000 토큰 부트스트랩 제한 — PARTIAL
@@ -235,6 +312,14 @@
   - "상시 로드 ≤1,000토큰" 기준 없음
   - "SKILL.md body ≤2,500토큰" 기준 없음
 - inject-context.sh의 실제 주입 내용/크기 미확인
+
+**멀티 도메인 확장 영향 (★★★ CRITICAL):**
+- CLAUDE.md가 **도메인별로 달라져야** 함:
+  - Embedded C: "MCU: MK10DN512, Core: Cortex-M4, Stack: 4KB, float F suffix 필수"
+  - Embedded Linux: "Target: i.MX8MP, Yocto: kirkstone, toolchain: aarch64-poky-linux"
+  - WPF: ".NET 8, MVVM Toolkit, C# 12, nullable reference types 활성"
+- `inject-context.sh` (SessionStart hook)이 **프로젝트 타입에 따라 다른 컨텍스트** 주입 필요
+- `src/core/claude.rs`에서 CLAUDE.md의 `<!-- BEGIN MCUFORGE SKILLS -->` 섹션 관리 로직이 있으나 **도메인 인식 없음**
 
 ---
 
@@ -261,6 +346,131 @@
 | do-test-gen | — | generate_unity_test.py 필요 |
 | act-commit | — | commit_msg.py 가능 |
 | (precision-analyzer) | — | precision_calc.py 필요 (스킬 자체 없음) |
+
+**멀티 도메인 확장 영향 (★★):**
+- **Embedded Linux**: `parse_bitbake_log.py` (Yocto 빌드 로그 파싱), `analyze_dtb.py` (Device Tree 분석), `check_rootfs_size.py` (rootfs 사이즈 검사) 등
+- **WPF**: `parse_csproj.py` (.csproj 의존성 분석), `check_binding_errors.py` (바인딩 에러 분석) 등
+- 현재 1개 → 3개 도메인 시 **최소 10개+ 스크립트** → stdlib-only 원칙 + 관리 전략 선행 필수
+
+---
+
+## 멀티 도메인 아키텍처 확장성 분석
+
+### 현재 아키텍처: 단일 도메인(Embedded C) 하드코딩
+
+```
+skills/
+├── universal/        ← 도메인 무관 (6 skills)
+├── embedded-c/       ← MCU 펌웨어 전용 (14 skills) ◀ 유일한 도메인
+├── templates/        ← 프로젝트별 커스터마이징 (9 skills)
+├── agents/           ← AI 에이전트 (12)
+└── hooks/            ← 코딩 규칙 강제 (18) — 전부 embedded-c 전용
+```
+
+### 확장 목표: 3개 도메인
+
+```
+skills/
+├── universal/        ← 도메인 무관 (공통)
+├── embedded-c/       ← MCU 펌웨어 (Cortex-M, RTOS 없음)
+├── embedded-linux/   ← Embedded Linux App (Yocto/Buildroot, C/C++, IPC) ◀ 신규
+├── wpf-dotnet/       ← WPF Desktop App (C#, MVVM, .NET 8+)             ◀ 신규
+├── templates/        ← 프로젝트별 (도메인 템플릿 변수 추가)
+├── agents/           ← 도메인별 + 공통 에이전트
+└── hooks/            ← 도메인별 + 공통 hooks
+```
+
+### Rust 코드의 도메인 하드코딩 현황
+
+| 파일 | 위치 | 하드코딩 내용 | 확장 방법 |
+|------|------|-------------|----------|
+| `src/core/project.rs:40-44` | `ClaudeSkillsConfig` | `embedded_c: Option<bool>` 필드만 | `domains: HashMap<String, bool>` |
+| `src/core/claude.rs:156-164` | `install_skills()` | `if skills_cfg.embedded_c` 단일 분기 | manifest에서 도메인 동적 로드 루프 |
+| `src/core/project.rs:104-109` | `ProjectMeta` | `project_type` 필드 **미사용** | 도메인 자동 선택에 활용 |
+| `skills/pack.sh` | tar 명령어 | `embedded-c/` 하드코딩 | manifest 카테고리 키 동적 패키징 |
+| `skills/settings.json.tmpl` | hooks 전체 | 모든 hooks 무조건 설치 | 도메인별 hook 필터링 |
+
+### 확장 설계안
+
+```
+embtool.toml (프로젝트 설정)
+┌────────────────────────────────┐
+│ [project]                      │
+│ type = "embedded-linux"  ← KEY │
+│                                │
+│ [claude.skills]                │
+│ universal = true               │
+│ embedded_linux = true          │
+│ embedded_c = false             │
+│ wpf_dotnet = false             │
+└────────┬───────────────────────┘
+         │
+         ▼
+install_skills() in claude.rs
+┌────────────────────────────────┐
+│ 1. manifest.json 읽기          │
+│ 2. project_type → 기본 번들 결정│
+│ 3. skills_cfg → 오버라이드 적용 │
+│ 4. 선택된 도메인만 설치         │
+│ 5. hooks도 도메인 필터링        │
+└────────────────────────────────┘
+```
+
+### 도메인별 필요 스킬 맵핑
+
+#### Embedded Linux App (예상 ~12 skills)
+```
+skills/embedded-linux/
+├── do-build-yocto/          ← bitbake 빌드 + SDK 크로스 컴파일
+├── do-deploy/               ← scp/rsync 타겟 배포
+├── do-scaffold-linux/       ← Linux app 스캐폴딩 (systemd service 포함)
+├── do-remote-debug/         ← GDB remote, strace, perf, coredump
+├── check-code-review-linux/ ← IPC 안전성, fd 누수, 권한, SELinux
+├── check-rootfs-size/       ← rootfs 파티션 사이즈 게이트
+├── verify-posix-safety/     ← POSIX API 안전 사용 (signal safety)
+├── verify-ipc-protocol/     ← D-Bus/socket/shm 프로토콜 일관성
+├── ref-device-tree/         ← DTS 레퍼런스 + 바인딩 문서
+├── ref-linux-bsp/           ← BSP 레이어, 커널 모듈, sysfs
+├── ref-coding-rules-cpp/    ← Modern C++17/20 코딩 규칙
+└── plan-systemd-service/    ← systemd 서비스 설계 + 의존성 분석
+```
+
+#### WPF/.NET (예상 ~10 skills)
+```
+skills/wpf-dotnet/
+├── do-build-dotnet/              ← dotnet build/publish
+├── do-scaffold-wpf/              ← MVVM 스캐폴딩 (ViewModel+View+Model)
+├── do-lint-roslyn/               ← Roslyn analyzer + .editorconfig
+├── check-code-review-wpf/       ← MVVM 준수, 바인딩, 메모리 누수
+├── check-test-coverage-dotnet/   ← xUnit + Moq 커버리지
+├── verify-mvvm-pattern/          ← ViewModel에 View 참조 금지, ICommand
+├── verify-nullable/              ← nullable reference type 위반
+├── verify-naming-dotnet/         ← C# 네이밍 (PascalCase, _camelCase)
+├── ref-wpf-patterns/             ← MVVM, DI, IValueConverter 패턴
+└── ref-dotnet-api/               ← .NET 8 API, NuGet 가이드
+```
+
+### Hooks 도메인화 방안
+
+현재 `settings.json.tmpl`은 모든 hooks 무조건 설치. 2가지 방안:
+
+**방안 A: domain 필드 추가 (최소 변경)**
+```json
+{
+  "matcher": "Write|Edit",
+  "domain": "embedded-c",
+  "hooks": [{"command": "check-float-suffix.sh", "blocking": true}]
+}
+```
+
+**방안 B: hooks 디렉토리 도메인 분리 (깔끔)**
+```
+skills/hooks/
+├── common/          ← 모든 도메인 (function-length, nesting-depth 등)
+├── embedded-c/      ← MCU 전용 (float-suffix, stdint, driver-boundary)
+├── embedded-linux/  ← Linux 전용 (fd-leak-check, posix-safety)
+└── wpf-dotnet/      ← WPF 전용 (mvvm-pattern, nullable-check)
+```
 
 ---
 
@@ -291,18 +501,47 @@
 
 → **암묵적으로 올바른 방향이나, 명시적 설계 원칙으로 승격되지 않음**
 
+### 멀티 도메인 확장 시 추가 과제
+
+1. **도메인 하드코딩 제거**: `ClaudeSkillsConfig`와 `install_skills()`에 embedded-c만 하드코딩 → 동적화 필수
+2. **Hooks 도메인 격리**: WPF 개발자가 float-suffix hook에 차단되는 문제 해결
+3. **토큰 예산 폭발**: 3개 도메인 동시 로드 시 ~5,500줄 → 선택적 로딩 필수
+4. **CLAUDE.md 도메인 인식**: 프로젝트 타입에 따라 다른 핵심 원칙 주입
+
 ---
 
-## 반영 액션 우선순위
+## 반영 액션 우선순위 (멀티 도메인 확장 고려)
 
-| 순위 | 인사이트 | 작업 | 영향 | 노력 |
-|:----:|---------|------|:----:|:----:|
-| 1 | #9 + #6 | CLAUDE.md 생성 + 토큰 예산 가이드라인 문서화 | 높음 | 낮음 |
-| 2 | #1 | CLAUDE.md에 워크플로우 순서 강제 규칙 추가 | 높음 | 중간 |
-| 3 | #7 | manifest.json에 bundles 섹션 추가 | 중간 | 낮음 |
-| 4 | #10 | parse_map.py, generate_unity_test.py 등 생성 | 중간 | 중간 |
-| 5 | #8 | ref-hardware에 문서 그룹 참조 패턴 추가 | 중간 | 낮음 |
-| 6 | #2 | check-code-review, do-debug에 dot 플로우차트 추가 | 중간 | 중간 |
-| 7 | #3 | check-code-review 독립 패스 구조 + git 히스토리 | 중간 | 중간 |
-| 8 | #5 | precision-analyzer 스킬 + 계산 스크립트 신규 생성 | 낮음 | 높음 |
-| 9 | #4 | semantic duplicate 탐지 모드 추가 | 낮음 | 높음 |
+### Phase 0: 아키텍처 기반 (멀티 도메인 전제 조건)
+
+| 순위 | 인사이트 | 작업 | 수정 파일 | 노력 |
+|:----:|---------|------|----------|:----:|
+| 0-A | #7 번들 + 도메인 인식 | `ClaudeSkillsConfig` 동적화, `install_skills()` 루프화, `project_type` 활용 | `project.rs`, `claude.rs`, `manifest.json` | **높음** |
+| 0-B | #9 + #6 CLAUDE.md 템플릿화 | CLAUDE.md.tmpl 도메인별 섹션 + 토큰 예산 가이드라인 | `templates/`, `claude.rs` | 중간 |
+| 0-C | Hooks 도메인 필터링 | `settings.json.tmpl` domain 필드 또는 hooks/ 도메인 분리 | `hooks/`, `settings.json.tmpl` | 중간 |
+
+### Phase 1: 공통 인프라 (도메인 무관)
+
+| 순위 | 인사이트 | 작업 | 노력 |
+|:----:|---------|------|:----:|
+| 1-A | #1 | 도메인별 워크플로우 DAG → SKILL.md + CLAUDE.md hard rule | 중간 |
+| 1-B | #10 | stdlib-only 원칙 문서화 + 도메인별 필수 스크립트 목록 | 낮음 |
+| 1-C | #8 | ref-* 스킬에 "관련 문서 동시 참조" 패턴 추가 | 낮음 |
+
+### Phase 2: 스킬 품질 강화 (기존 embedded-c 개선)
+
+| 순위 | 인사이트 | 작업 | 노력 |
+|:----:|---------|------|:----:|
+| 2-A | #2 | check-code-review, do-debug에 dot 플로우차트 추가 | 중간 |
+| 2-B | #3 | check-code-review 독립 패스 구조 + git 히스토리 리뷰 | 중간 |
+| 2-C | #4 | universal에 semantic-duplicate-finder 스킬 추가 | 높음 |
+| 2-D | #5 | embedded-c에 precision-analyzer 스킬 + 계산 스크립트 | 높음 |
+
+### Phase 3: 신규 도메인 스킬 생성
+
+| 순위 | 작업 | 예상 스킬 수 | 노력 |
+|:----:|------|:----------:|:----:|
+| 3-A | `skills/embedded-linux/` 도메인 생성 | ~12 | 높음 |
+| 3-B | `skills/wpf-dotnet/` 도메인 생성 | ~10 | 높음 |
+| 3-C | 도메인별 agents 추가 | ~6 | 중간 |
+| 3-D | 도메인별 hooks 추가 | ~8 | 중간 |
