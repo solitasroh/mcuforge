@@ -1,0 +1,68 @@
+# HardFault Debugging Checklist — {{mcu}} ({{core}})
+
+## Step 1: Read Fault Status Registers
+
+| Register | Address | What It Tells |
+|----------|---------|---------------|
+| SCB->CFSR | 0xE000ED28 | Combined Configurable Fault Status |
+| SCB->HFSR | 0xE000ED2C | HardFault Status |
+| SCB->MMFAR | 0xE000ED34 | MemManage Fault Address (if MMARVALID) |
+| SCB->BFAR | 0xE000ED38 | BusFault Address (if BFARVALID) |
+
+## Step 2: Decode CFSR Bits
+
+### UsageFault (bits 16-25)
+| Bit | Name | Meaning |
+|-----|------|---------|
+| 25 | DIVBYZERO | Division by zero (if DIV_0_TRP enabled) |
+| 24 | UNALIGNED | Unaligned access |
+| 19 | NOCP | No coprocessor (FPU not enabled) |
+| 18 | INVPC | Invalid PC load on return |
+| 17 | INVSTATE | Invalid EPSR state (Thumb bit) |
+| 16 | UNDEFINSTR | Undefined instruction |
+
+### BusFault (bits 8-15)
+| Bit | Name | Meaning |
+|-----|------|---------|
+| 15 | BFARVALID | BFAR holds valid address |
+| 13 | LSPERR | Lazy state preservation error |
+| 12 | STKERR | Stacking error on exception entry |
+| 11 | UNSTKERR | Unstacking error on exception return |
+| 10 | IMPRECISERR | Imprecise data access (address unknown) |
+| 9 | PRECISERR | Precise data access (BFAR valid) |
+| 8 | IBUSERR | Instruction bus error |
+
+### MemManage (bits 0-7)
+| Bit | Name | Meaning |
+|-----|------|---------|
+| 7 | MMARVALID | MMFAR holds valid address |
+| 4 | MSTKERR | Stacking error |
+| 3 | MUNSTKERR | Unstacking error |
+| 1 | DACCVIOL | Data access violation |
+| 0 | IACCVIOL | Instruction access violation |
+
+## Step 3: Read Stacked PC/LR
+
+```c
+// In HardFault_Handler, read stacked registers:
+// R0-R3, R12, LR, PC, xPSR are pushed to stack
+// PC = stack[6] — the faulting instruction
+// LR = stack[5] — the return address
+```
+
+## Step 4: Common Causes on {{mcu}}
+
+| Fault Pattern | CFSR Value | Likely Cause |
+|---------------|-----------|--------------|
+| PRECISERR + BFARVALID | 0x00000200 + 0x00008000 | NULL pointer dereference (BFAR=0x00000000) |
+| UNALIGNED | 0x01000000 | Unaligned LDRD/STRD/LDM/STM |
+| UNDEFINSTR | 0x00010000 | Stack overflow corrupted code |
+| IMPRECISERR | 0x00000400 | Write to invalid memory (hard to trace) |
+| IBUSERR | 0x00000100 | PC jumped to non-executable region |
+| STKERR | 0x00001000 | Stack pointer below valid RAM |
+
+## Step 5: Stack Overflow Detection
+
+1. Check SP value — if below `0x1FFF8000` (SRAM_L start), stack overflow
+2. Check stack canary pattern at bottom of stack
+3. Stack size is only 1.5KB — local arrays >128B are high risk

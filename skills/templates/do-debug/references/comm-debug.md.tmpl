@@ -1,0 +1,40 @@
+# Communication Failure Debugging — UART / Host Protocol
+
+## UART Hardware Checklist
+
+| Step | Check | Command/Location |
+|------|-------|-----------------|
+| 1 | Clock gating enabled | `SIM->SCGC4 & SIM_SCGC4_UARTx_MASK` |
+| 2 | TX/RX pins muxed | `PORTx->PCR[n] = PORT_PCR_MUX(3)` |
+| 3 | Baud rate correct | `UARTx->BDH/BDL` vs expected value |
+| 4 | TX/RX enabled | `UARTx->C2 & (UART_C2_TE_MASK \| UART_C2_RE_MASK)` |
+| 5 | RX interrupt enabled | `UARTx->C2 & UART_C2_RIE_MASK` + NVIC check |
+| 6 | Error flags clear | `UARTx->S1 & (FE \| NF \| OR \| PF)` |
+
+## Protocol Layer Checklist
+
+| Step | Check | How |
+|------|-------|-----|
+| 1 | Ring buffer not full | Check write_idx vs read_idx distance |
+| 2 | Frame delimiter valid | Verify start/end byte matches protocol |
+| 3 | CRC matches | Recalculate CRC of received payload |
+| 4 | Register address valid | Check against register_map.c entries |
+| 5 | Response sent | Check `module_write()` called and TX complete |
+
+## Common Symptoms → Root Cause
+
+| Symptom | Check First | Likely Root Cause |
+|---------|-------------|-------------------|
+| No response at all | UART HW step 1-5 | Clock/pin/enable not configured |
+| Garbled data | HW step 3 | Baud rate mismatch |
+| Intermittent drops | HW step 5-6 | ISR priority conflict, buffer overflow |
+| Timeout on host side | Protocol step 5 | TX not completing, flow control issue |
+| Wrong data values | Protocol step 4 | Register map mismatch between host and MCU |
+| Framing errors | HW step 6 | Noise on line, baud rate drift, ground issue |
+
+## Interrupt Priority Conflicts
+
+{{mcu}} has 4-bit priority (0-15, 0=highest). Check:
+- UART ISR priority vs DMA ISR, PIT ISR, ADC ISR
+- If UART priority is lower (higher number), it may be starved
+- Critical: UART ISR should not be preempted during frame reception
