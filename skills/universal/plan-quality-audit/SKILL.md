@@ -12,6 +12,8 @@ Analyze structural quality metrics across the entire codebase or a specific dire
 
 ## Metrics and Thresholds
 
+See `references/metric-thresholds.md` for detailed rationale behind each threshold.
+
 | Metric | Threshold | Severity when exceeded |
 |--------|-----------|----------------------|
 | Cyclomatic Complexity | ≤10 per function | Warning >10, Critical >20 |
@@ -170,6 +172,8 @@ Use `--refactor` for detailed refactoring strategy recommendations.
 
 ### Supported Patterns
 
+See `references/refactoring-patterns.md` for detailed before/after examples of each pattern.
+
 | Pattern | C Application | Trigger |
 |---------|--------------|---------|
 | Extract Function | Split long function into logical units | Function >60 lines |
@@ -182,6 +186,31 @@ Use `--refactor` for detailed refactoring strategy recommendations.
 
 1. Read target file(s)
 2. Identify refactoring candidates using metrics
-3. For each candidate: describe problem, propose pattern, show before/after
+3. For each candidate: describe problem, propose pattern, show before/after (use `references/refactoring-patterns.md` as template)
 4. Assess risk and dependencies
 5. Prioritize by impact and safety
+
+## Data Storage
+
+Save audit results to `.claude/data/quality/` for trend tracking.
+
+**File naming**: `YYYY-MM-DD_<scope>.json`
+**When to save**: After Step 7 (Report) completes.
+
+**JSON Schema**:
+```json
+{
+  "date": "2026-03-20",
+  "commit": "8438bfe",
+  "scope": "Sources",
+  "files_analyzed": 6,
+  "metrics": {
+    "max_cc": { "value": 15, "file": "measure.c", "function": "process_measurement" },
+    "max_length": { "value": 82, "file": "insulation_index.c", "function": "evaluate_index" },
+    "max_nesting": { "value": 4, "file": "module_management.c", "function": "parse_command" }
+  },
+  "debt": { "explicit": 3, "implicit": 5, "total": 8 },
+  "logic_flaws": { "critical": 1, "warning": 3 },
+  "violations": { "warning": 7, "critical": 2 }
+}
+```

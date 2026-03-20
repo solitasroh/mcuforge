@@ -20,7 +20,7 @@ agent: embedded-reviewer
 3. Code Review (Agent Role: Embedded Firmware Reviewer)
    - Analyze changes focusing on:
      - **Safety**: ISR reentrancy, volatile usage, critical sections (see Safety Verification below).
-     - **Performance**: Stack usage on MK10D7 (4KB limit), float vs double (soft-float penalty).
+     - **Performance**: Stack usage (refer to CLAUDE.md for stack limit), float vs double (soft-float penalty).
      - **Correctness**: Hardware access patterns (CMSIS usage), peripheral clock gating (SIM_SCGC).
      - **Style**: Naming conventions (`snake_case`), float suffix (`0.0F`).
 
@@ -73,6 +73,8 @@ Use `--safety` to perform detailed ISR safety analysis. The following items are 
 Use `--peripheral=<name>` to validate peripheral initialization completeness.
 
 ### Universal Checklist (all peripherals)
+
+See `ref-hardware` for register base addresses and field definitions. See `ref-peripheral-driver` for init/deinit lifecycle patterns.
 
 1. [ ] Clock gating enabled (`SIM->SCGCx`)
 2. [ ] Pin mux configured (`PORT->PCR[n]`)

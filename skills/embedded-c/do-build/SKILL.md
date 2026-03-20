@@ -22,6 +22,13 @@ user-invokable: true
 4. Build Firmware
    - `cmake --build --preset <Preset> --parallel`
 
+## Gotchas
+
+1. **Stale CMakeCache**: If you switch presets (e.g., Debug → Release) without `--clean`, old cache variables may persist and cause unexpected behavior. When in doubt, use `--clean`.
+2. **MinSizeRel debug symbols**: MinSizeRel strips debug info (`-Os -DNDEBUG`). Do NOT use this preset when you need to debug with J-Link/SWD — use Debug or RelWithDebInfo instead.
+3. **output/ directory corruption**: If a previous build was interrupted (e.g., Ctrl+C during linking), the output/ directory may contain partial artifacts. Run `--clean` to recover.
+4. **Parallel build race**: On rare occasions, `--parallel` with Ninja can hit file locking issues on Windows. If you see sporadic "access denied" errors, retry without `--parallel` or with `--clean`.
+
 5. Report Status
    - Success:
      - `arm-none-eabi-size output/*.elf` (text/data/bss)

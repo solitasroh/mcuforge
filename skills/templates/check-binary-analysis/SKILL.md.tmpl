@@ -184,3 +184,36 @@ Compare firmware metrics between branches to detect regressions.
 
 ### Verdict: PASS | WARN | FAIL
 ```
+
+## Data Storage
+
+Save analysis results to `.claude/data/binary-analysis/` for trend tracking and regression baseline.
+
+**File naming**: `YYYY-MM-DD_<preset>.json`
+**Example**: `.claude/data/binary-analysis/2026-03-20_Release.json`
+
+**When to save**: After every `size` or `budget` sub-command execution, append or overwrite the day's file.
+
+**JSON Schema**:
+```json
+{
+  "date": "2026-03-20",
+  "preset": "Release",
+  "commit": "8438bfe",
+  "branch": "develop",
+  "flash": { "used": 153600, "total": 196608, "percent": 78.1 },
+  "ram": { "used": 12698, "total": 32512, "percent": 39.1 },
+  "stack": { "worst_case": 892, "total": 1536, "percent": 58.1 },
+  "top_symbols": [
+    { "name": "symbol_name", "section": ".text", "size": 2048 }
+  ]
+}
+```
+
+**Usage in regression**: When `regression` sub-command runs, check `.claude/data/binary-analysis/` for previous baselines before falling back to `git show HEAD~1`. This provides more accurate trend data across multiple sessions.
+
+## Skill Composition
+
+- **After build**: `do-build` → `check-binary-analysis size` — always check size after successful build
+- **Before release**: `check-binary-analysis budget` — verify all memory regions within thresholds
+- **Branch comparison**: `check-binary-analysis regression --base=develop` — detect regressions before MR

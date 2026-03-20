@@ -83,7 +83,7 @@ Implement parity error detection in UART RX ISR with automatic
 recovery by flushing the RX buffer and re-enabling the receiver.
 
 Components: uart, itask
-Size impact: Flash +896B, RAM +0B (a2750lm_application Debug)
+Size impact: Flash +896B, RAM +0B (Debug)
 ```
 
 ```

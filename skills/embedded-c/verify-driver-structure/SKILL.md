@@ -8,7 +8,7 @@ user-invokable: false
 
 ## Purpose
 
-Maintains clean architectural boundaries within the `a2750irm` project.
+Maintains clean architectural boundaries within the project.
 
 - **Dependency Rule**: Code in `Drivers/` must only depend on hardware registers (CMSIS) or standard libraries. It must NEVER `#include` headers from `Sources/` (Application Layer) or `Components/` (Middleware).
 - **Naming Rule**: Driver initialization functions must be suffixed with `_init` (e.g., `adc_init`, `uart_init`).

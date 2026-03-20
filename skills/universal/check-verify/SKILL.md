@@ -26,7 +26,9 @@ Performs integrated verification by sequentially executing all `verify-*` skills
 
 ## Target Skills
 
-This list constitutes the verification skills executed sequentially by this skill. 이 목록은 수동으로 관리합니다.
+**Auto-discovery**: Use `Glob(".claude/skills/verify-*/SKILL.md")` to dynamically find all verify skills. Do NOT rely on a hardcoded list — new verify skills are automatically included when their folder exists.
+
+Expected skills (reference only — actual list is determined by Glob):
 
 | # | Skill | Description |
 |---|-------|-------------|
@@ -40,11 +42,14 @@ This list constitutes the verification skills executed sequentially by this skil
 
 ### Step 1: Introduction
 
-Check the **Target Skills** section above.
+Discover verify skills dynamically:
 
-If optional arguments are provided, filter for those specific skills.
+1. Run `Glob(".claude/skills/verify-*/SKILL.md")` to find all verify skill folders
+2. Read each discovered SKILL.md's frontmatter (`name`, `description`)
+3. Build the execution list from discovered skills
+4. If optional arguments are provided, filter for those specific skills
 
-**If 0 skills are registered:**
+**If 0 skills discovered:**
 
 ```markdown
 ## Implementation Verification
@@ -228,6 +233,27 @@ The following are **NOT issues**:
 1. **No Registered Skills** — Display guidance message instead of error
 2. **Skill's Own Exceptions** — Patterns defined in Exceptions section of each verify skill are not reported
 3. **check-verify Itself** — Must not include itself in target list
+
+## Data Storage
+
+Save consolidated verification results to `.claude/data/verify/` for compliance tracking.
+
+**File naming**: `YYYY-MM-DD.json`
+**When to save**: After Step 3 (Consolidated Report) completes.
+
+**JSON Schema**:
+```json
+{
+  "date": "2026-03-20",
+  "commit": "8438bfe",
+  "skills_executed": 5,
+  "total_issues": 2,
+  "results": [
+    { "skill": "verify-float-suffix", "status": "PASS", "issues": 0 },
+    { "skill": "verify-barr-c", "status": "FAIL", "issues": 2, "details": ["file:line description"] }
+  ]
+}
+```
 
 ## Related Files
 

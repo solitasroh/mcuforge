@@ -120,9 +120,34 @@ Default thresholds (configurable via `--threshold`):
 ```
 
 Coverage results help identify:
-1. Functions that need test cases → feed back to `do-test-gen`
-2. Error paths not exercised → add error test cases
-3. Branches not covered → add boundary test cases
+1. Functions that need test cases → feed `uncovered_functions` list from Data Storage to `do-test-gen`
+2. Error paths not exercised → `do-test-gen --design` for targeted error test cases
+3. Branches not covered → apply `do-test-gen references/boundary-checklist.md`
+
+**Auto-feed workflow**: When coverage is below threshold, read `.claude/data/coverage/` latest JSON → extract `uncovered_functions` → pass to `/do-test-gen <function>` for targeted test generation.
+
+## Data Storage
+
+Save coverage results to `.claude/data/coverage/` for trend tracking.
+
+**File naming**: `YYYY-MM-DD.json`
+**When to save**: After Step 5 (Report) completes.
+
+**JSON Schema**:
+```json
+{
+  "date": "2026-03-20",
+  "commit": "8438bfe",
+  "tests": { "total": 42, "passed": 40, "failed": 2 },
+  "modules": [
+    { "name": "calibration.c", "function_pct": 80.0, "line_pct": 72.0, "branch_pct": 60.0 }
+  ],
+  "totals": { "function_pct": 70.0, "line_pct": 63.0, "branch_pct": 52.0 },
+  "uncovered_functions": ["measure.c:apply_temp_comp", "calibration.c:calibrate_current"]
+}
+```
+
+**Usage**: Feed uncovered_functions list to `do-test-gen` for targeted test generation.
 
 ## Exceptions
 

@@ -259,6 +259,14 @@ switch (state)
 |---|------|-----------|------|-------------|
 ```
 
+## Gotchas
+
+1. **Macro false positives (Check 2)**: `goto` or `register` inside macro expansions or `#define` bodies may trigger false positives. Always verify the match is in actual code, not a macro definition or string literal.
+2. **Assignment in condition regex (Check 3)**: The pattern `[^!=<>]=(?!=)` can false-positive on `!=` operators when whitespace is unusual (e.g., `if(x !=y)`). Verify context before reporting.
+3. **Multiline switch detection (Check 4)**: `switch` blocks spanning many lines require multiline Grep or Read-based analysis. Simple single-line Grep may miss the `default:` that exists 50+ lines below the `switch`.
+4. **Float comparison with integer context (Check 5)**: `if (count == 0)` where `count` is `uint32_t` is NOT a float equality violation. Always check the variable type before reporting.
+5. **Enum switch completeness (Check 7)**: Enum values added via `#define` (not native `enum`) are invisible to this check. Only `typedef enum` declarations are reliably detected.
+
 ## Exceptions
 
 The following are **NOT violations**:

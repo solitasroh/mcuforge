@@ -281,6 +281,14 @@ int main(void) {
 | dio.c | Medium | Low | GPIO abstraction | gpio_hal.h, wtask.h |
 | hv.c | Low | High (register access) | Heavy HW dependency | gpio.h, adc.h |
 
+## Gotchas
+
+1. **CMake duplicate source**: When using Include-the-Source pattern, do NOT add `module.c` to `add_executable()` — it is `#include`d in the test file. Adding it to both causes duplicate symbol errors at link time.
+2. **arm_math.h stub missing**: If `stubs/CMSIS/arm_math.h` is not created, any module that `#include`s `arm_math.h` will fail with "file not found" on x86. Always check ARM/CMSIS dependencies in Step 2.
+3. **fff fake include order**: Fake headers MUST come before `module.c` inclusion. If a fake is included after `module.c`, the real header is already resolved and the fake is ignored — tests silently call real (unlinked) functions.
+4. **fff RESET_FAKE missing**: Forgetting `RESET_FAKE()` in `setUp()` causes test pollution — `call_count` and `return_val` carry over from previous tests, producing flaky results.
+5. **Static variable state**: Include-the-Source exposes file-scope static variables. These persist between tests unless explicitly reset in `setUp()`. A passing test may fail when run order changes.
+
 ## fff → CMock Migration Criteria
 
 | Condition | Current | Migration Trigger |

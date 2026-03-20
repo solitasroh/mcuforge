@@ -1,6 +1,6 @@
 ---
 name: do-apidoc
-description: "Generates API documentation exclusively from Components/ header files by parsing types, constants, and function declarations. Use when documenting component library APIs or generating reference docs for Components/ modules. Do NOT use for application-level Sources/ documentation, data flow explanation (use plan-dataflow), or code review (use check-code-review)."
+description: "ALWAYS use when documenting component library APIs or generating reference docs for Components/ modules. Generates API documentation exclusively from Components/ header files by parsing types, constants, and function declarations. ALWAYS use when user mentions: API 문서, API doc, 헤더 문서화, header documentation, 컴포넌트 문서, component doc, 함수 목록, function list, 인터페이스 문서, interface reference, Components 문서화. Do NOT use for application-level Sources/ documentation, data flow explanation (use plan-dataflow), or code review (use check-code-review)."
 argument-hint: "<component|all> [--output=<path>] [--format=md|stdout]"
 user-invokable: true
 ---

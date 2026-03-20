@@ -10,7 +10,7 @@ user-invokable: false
 
 Enforces the use of the `F` suffix for floating-point literals.
 
-- **Soft-Float Environment**: MK10D7 (Cortex-M4) has no FPU. Using `double` (e.g., `0.0`) instead of `float` (`0.0F`) severely degrades performance and increases code size.
+- **Soft-Float Environment**: Cortex-M4 without FPU (soft-float). Using `double` (e.g., `0.0`) instead of `float` (`0.0F`) severely degrades performance and increases code size.
 - **Rule**: `CLAUDE.md` explicitly requires uppercase `F` suffix for float literals.
 
 ## When to Run

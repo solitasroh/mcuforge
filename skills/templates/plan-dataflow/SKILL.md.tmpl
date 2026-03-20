@@ -13,7 +13,8 @@ Trace data flow through the insulation resistance measurement pipeline.
 
 ### Case A: No argument (full pipeline trace)
 
-1. Use Pipeline Stages below as anchor — read each stage's source file to verify current implementation
+1. **First**: Run `scripts/verify-anchor.sh` to check if pipeline anchors are still valid. If any anchors are missing, report discrepancies before proceeding.
+2. Use Pipeline Stages below as anchor — read each stage's source file to verify current implementation
 2. Report any discrepancy between anchor and actual code (renamed functions, added stages, changed parameters)
 3. Output: 8-stage diagram with actual function names, timing, unit conversions, sync mechanisms
 

@@ -25,7 +25,7 @@ Analyze `#include` dependency graph across the codebase to detect structural iss
 2. **Parse**: Extract `#include` directives from each file
 3. **Classify**: Categorize each include as:
    - **System**: `<stdint.h>`, `<string.h>` (ignored in analysis)
-   - **Vendor**: CMSIS, MK10D7 headers (noted but not flagged)
+   - **Vendor**: CMSIS, MCU vendor headers (noted but not flagged)
    - **Project**: Application, Driver, Component headers (analyzed)
 4. **Build Graph**: Create directed graph: file A includes file B → edge A→B
 
