@@ -1,2 +1,9 @@
 /target
 Cargo.lock
+
+# Claude Code local settings/cache
+.claude/
+skills/.claude/
+
+# Archive artifacts
+*.tar.gz
